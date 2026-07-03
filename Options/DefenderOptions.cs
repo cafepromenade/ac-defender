@@ -49,13 +49,13 @@ public sealed class DefenderOptions
     public double OutdoorLiteModeBandCelsius { get; set; } = 1.0;
 
     /// <summary>
-    /// Electricity-cost tracking. The defender integrates the configured Alectra power sensor (W→kWh)
-    /// over time, multiplies each interval by the current Alectra time-of-use rate, and accumulates
+    /// Electricity-cost tracking. The defender integrates the configured Ontario Energy power sensor (W→kWh)
+    /// over time, multiplies each interval by the current Ontario Energy time-of-use rate, and accumulates
     /// total / today / this-month cost. Rates below are the ENERGY COMMODITY portion only (¢/kWh);
     /// a real bill also has delivery, regulatory charges, the Ontario Electricity Rebate, and HST —
     /// approximate an all-in bill with <see cref="ElectricityAllInMultiplier"/> and
     /// <see cref="ElectricityAllInAdderCentsPerKwh"/>, which default to commodity-only. Update these
-    /// when the OEB changes the TOU prices. See <see cref="Services.AlectraTouSchedule"/> for the
+    /// when the OEB changes the TOU prices. See <see cref="Services.OntarioEnergyTouSchedule"/> for the
     /// summer/winter/weekend/holiday schedule.
     /// </summary>
     public bool ElectricityCostTrackingEnabled { get; set; } = true;
@@ -71,12 +71,12 @@ public sealed class DefenderOptions
     public double ElectricityAllInAdderCentsPerKwh { get; set; } = 0.0;
 
     /// <summary>
-    /// All-in "out of pocket" bill components layered on top of the commodity cost, in Ontario/Alectra
+    /// All-in "out of pocket" bill components layered on top of the commodity cost, in Ontario/Ontario Energy
     /// residential bill order:
     ///   all_in = (commodity + delivery_fixed + delivery_variable + regulatory) × (1 − OER) × (1 + HST)
     /// The Ontario Electricity Rebate (OER) is a percentage credit on the pre-tax subtotal, applied
     /// BEFORE HST. Commodity, OER, and HST are standard province-wide; the DELIVERY and REGULATORY
-    /// numbers are customer- and rate-class-specific — copy the exact values from your own Alectra bill
+    /// numbers are customer- and rate-class-specific — copy the exact values from your own Ontario Energy bill
     /// for a precise figure. The defaults below are only reasonable Ontario placeholders.
     /// The fixed monthly delivery/service charge is accrued smoothly over the month (per second) so it
     /// splits cleanly across the total / today / this-month buckets.
@@ -114,9 +114,9 @@ public sealed class DefenderOptions
 
     /// <summary>
     /// Estimated AC-only electricity cost, shown under the runtime hours on the Dashboard. The
-    /// Alectra whole-house sensor can be down (or absent), so this needs no sensor at all: every
+    /// Ontario Energy whole-house sensor can be down (or absent), so this needs no sensor at all: every
     /// second of real compressor runtime (hvac_action = cooling) is priced as a fixed assumed load —
-    /// amps × volts (default 30 A × 240 V = 7.2 kW) — at the Alectra time-of-use rate in force at
+    /// amps × volts (default 30 A × 240 V = 7.2 kW) — at the Ontario Energy time-of-use rate in force at
     /// that moment. Runtime backfilled from past recorder logs is priced the same way, so today /
     /// this-month / lifetime cost estimates cover the full logged history. This is an ESTIMATE of the
     /// energy commodity portion: a 30 A breaker rating is the ceiling, not the measured draw.

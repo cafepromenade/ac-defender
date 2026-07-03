@@ -14,19 +14,19 @@ public sealed class HomeAssistantOptions
 
     public string OutdoorTemperatureEntityId { get; set; } = "";
 
-    public string UsagePowerEntityId { get; set; } = "sensor.alectra_current_power";
+    public string UsagePowerEntityId { get; set; } = "sensor.ontario_energy_current_power";
 
-    public string UsageEnergyEntityId { get; set; } = "sensor.alectra_energy_today";
+    public string UsageEnergyEntityId { get; set; } = "sensor.ontario_energy_energy_today";
 
-    public string UsageCostEntityId { get; set; } = "sensor.alectra_cost_today";
+    public string UsageCostEntityId { get; set; } = "sensor.ontario_energy_cost_today";
 
-    public string UsageHourlyCostEntityId { get; set; } = "sensor.alectra_hourly_cost";
+    public string UsageHourlyCostEntityId { get; set; } = "sensor.ontario_energy_hourly_cost";
 
-    public string UsageCurrentBillEntityId { get; set; } = "sensor.alectra_current_bill";
+    public string UsageCurrentBillEntityId { get; set; } = "sensor.ontario_energy_current_bill";
 
-    public string UsageCurrentBillDueEntityId { get; set; } = "sensor.alectra_current_bill_due";
+    public string UsageCurrentBillDueEntityId { get; set; } = "sensor.ontario_energy_current_bill_due";
 
-    public string UsageCurrentBillStatusEntityId { get; set; } = "sensor.alectra_current_bill_status";
+    public string UsageCurrentBillStatusEntityId { get; set; } = "sensor.ontario_energy_current_bill_status";
 
     public string? Username { get; set; }
 

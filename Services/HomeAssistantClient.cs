@@ -265,13 +265,13 @@ public sealed class HomeAssistantClient
         var currentBill = await TryGetUsageEntityAsync(current.UsageCurrentBillEntityId, cancellationToken);
         var currentBillDue = await TryGetUsageEntityAsync(current.UsageCurrentBillDueEntityId, cancellationToken);
         var currentBillStatus = await TryGetUsageEntityAsync(current.UsageCurrentBillStatusEntityId, cancellationToken);
-        var alectraEntities = await GetAlectraEntitiesAsync(cancellationToken);
+        var ontarioEnergyEntities = await GetOntarioEnergyEntitiesAsync(cancellationToken);
 
-        return new UsageLiveSnapshot(power, energy, cost, hourlyCost, currentBill, currentBillDue, currentBillStatus, alectraEntities, true, DateTimeOffset.UtcNow);
+        return new UsageLiveSnapshot(power, energy, cost, hourlyCost, currentBill, currentBillDue, currentBillStatus, ontarioEnergyEntities, true, DateTimeOffset.UtcNow);
     }
 
     /// <summary>
-    /// Lightweight single-entity read of the configured Alectra power sensor, normalized to kW. Used by
+    /// Lightweight single-entity read of the configured Ontario Energy power sensor, normalized to kW. Used by
     /// the cost tracker every cycle; returns null when the sensor is unconfigured, missing, or non-numeric.
     /// </summary>
     public async Task<double?> GetUsagePowerKilowattsAsync(CancellationToken cancellationToken)
@@ -285,7 +285,7 @@ public sealed class HomeAssistantClient
         return NormalizePowerKilowatts(reading);
     }
 
-    public async Task<IReadOnlyList<UsageEntityReading>> GetAlectraEntitiesAsync(CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<UsageEntityReading>> GetOntarioEnergyEntitiesAsync(CancellationToken cancellationToken)
     {
         if (!IsConfigured)
         {
@@ -297,7 +297,7 @@ public sealed class HomeAssistantClient
         {
             var entityId = GetEntityId(entity);
             if (string.IsNullOrWhiteSpace(entityId)
-                || !entityId.Contains("alectra", StringComparison.OrdinalIgnoreCase))
+                || !entityId.Contains("ontario_energy", StringComparison.OrdinalIgnoreCase))
             {
                 continue;
             }
@@ -312,22 +312,22 @@ public sealed class HomeAssistantClient
             .ToArray();
     }
 
-    public async Task<AlectraPeakPowerReading> GetAlectraPeakPowerAsync(CancellationToken cancellationToken)
+    public async Task<OntarioEnergyPeakPowerReading> GetOntarioEnergyPeakPowerAsync(CancellationToken cancellationToken)
     {
         if (!IsConfigured)
         {
-            return new AlectraPeakPowerReading(false, null, null, null, null, DateTimeOffset.UtcNow);
+            return new OntarioEnergyPeakPowerReading(false, null, null, null, null, DateTimeOffset.UtcNow);
         }
 
         var current = options.CurrentValue;
-        var entities = await GetAlectraEntitiesAsync(cancellationToken);
+        var entities = await GetOntarioEnergyEntitiesAsync(cancellationToken);
         var power = FindUsageEntity(entities, current.UsagePowerEntityId, "current_power");
         var price = FindUsageEntity(entities, null, "current_price");
         var touPeriod = FindUsageEntity(entities, null, "current_tou_period");
-        var currentPlan = FindUsageEntity(entities, "select.alectra_current_plan", "current_plan")
-            ?? FindUsageEntity(entities, "sensor.alectra_current_plan", "current_plan");
+        var currentPlan = FindUsageEntity(entities, "select.ontario_energy_current_plan", "current_plan")
+            ?? FindUsageEntity(entities, "sensor.ontario_energy_current_plan", "current_plan");
 
-        return new AlectraPeakPowerReading(
+        return new OntarioEnergyPeakPowerReading(
             true,
             NormalizePowerKilowatts(power),
             NormalizePriceCentsPerKwh(price),

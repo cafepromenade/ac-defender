@@ -33,7 +33,7 @@ Assistant climate entity or returns a real error.
 - **People get courtesy; machines don't.** Human wall touches earn quiet waits, peace
   offerings, and natural-looking corrections. The AC app's own schedule (Rival Schedule
   Watch) is answered promptly — nobody is watching at 2 a.m.
-- **Money awareness built in.** Real compressor hours are priced at Alectra time-of-use
+- **Money awareness built in.** Real compressor hours are priced at Ontario Energy time-of-use
   rates (sensor-free), shown under the runtime counters, on an airline-style usage
   calendar, and steered by an optional monthly budget with a safety-first fallback.
 - **Safety always wins.** Hot rooms bypass every stealth wait; the budget yields to a

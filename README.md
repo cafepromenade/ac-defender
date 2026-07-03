@@ -25,7 +25,7 @@ entity or shows a real error.
    (SLEEP → DEEP SLEEP → GOOD MORNING, quietly drifting the room to ~26 °C at 2 a.m.) is
    recognized by **Rival Schedule Watch** and answered back to my temp without the human
    niceties.
-4. **Money awareness built in.** Real compressor hours are priced at Alectra time-of-use
+4. **Money awareness built in.** Real compressor hours are priced at Ontario Energy time-of-use
    rates with **no power sensor needed**, shown under the runtime counters, on an
    airline-fare-style **usage calendar**, and steered by an optional **monthly budget**
    that eases cooling when you're spending too fast — never past a safety temperature.
@@ -78,7 +78,7 @@ HomeAssistant__AccessToken=replace-with-token
 ```
 
 Open `http://<host>:8888` — the first account you create becomes the owner. All optional
-entities (weather, outdoor temperature, Alectra usage sensors) and every `Defender__*`
+entities (weather, outdoor temperature, Ontario Energy usage sensors) and every `Defender__*`
 tuning knob are listed in [Deployment](docs/wiki/Deployment.md).
 
 ### Local development
@@ -106,7 +106,7 @@ snapshot — no refreshing, ever:
 - **Defense** (`/defense`) — every guard as a live card with "How this works" and
   extra-specific decision drawers.
 - **Comfort** (`/comfort`) — the upstairs heat check with presence awareness.
-- **Energy** (`/energy`) — costs, Alectra intel, charts, and the AC usage **Calendar**.
+- **Energy** (`/energy`) — costs, Ontario Energy intel, charts, and the AC usage **Calendar**.
 - **Logs** (`/logs`) — the wall-touch audit trail with source attribution
   (person / phone / automation / rival schedule) and JSON detail.
 - **Controls** (`/controls`) — target, fan, force, off, and emergency buttons.

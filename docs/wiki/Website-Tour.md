@@ -73,7 +73,7 @@ The money page. Tabs across the middle:
 - **Overview** — electricity cost so far (today / this month / total), the current
   time-of-use price ("is power cheap or expensive right now?"), and the **Monthly budget**
   card if you set a budget.
-- **Alectra / Charts / Entity Table** — every live reading from the Alectra power
+- **Ontario Energy / Charts / Entity Table** — every live reading from the Ontario Energy power
   integration, searchable, with 24-hour charts.
 - **Calendar** — the fun one, below.
 
@@ -129,7 +129,7 @@ a one-line explanation under it. Highlights:
 
 - **The switch** — "Prefer staying inside a monthly budget."
 - **Monthly budget ($)** — how much you'd like to spend this month.
-- **Spend measured as** — either the whole-house bill (needs the live Alectra sensor) or the
+- **Spend measured as** — either the whole-house bill (needs the live Ontario Energy sensor) or the
   **AC-only estimate at fixed price-per-hour rates**, which needs no sensor at all. If the
   sensor goes quiet, the budget automatically uses the estimate — it never just stops working.
 - When you're spending faster than the month allows, the defender lets the room run a tiny

@@ -700,8 +700,8 @@ public sealed record AcRuntimeSnapshot(
     double MonthHours,
     double LifetimeHours,
     DateTimeOffset? TrackingSince,
-    // Estimated AC-only cost: cooling runtime priced at an assumed amps×volts load and the Alectra
-    // TOU rate in force at each moment. Sensor-free, so it survives the Alectra integration being down.
+    // Estimated AC-only cost: cooling runtime priced at an assumed amps×volts load and the Ontario Energy
+    // TOU rate in force at each moment. Sensor-free, so it survives the Ontario Energy integration being down.
     bool EstimatedCostEnabled = false,
     double EstimatedCostTodayDollars = 0,
     double EstimatedCostMonthDollars = 0,
@@ -709,7 +709,7 @@ public sealed record AcRuntimeSnapshot(
     double AssumedKilowatts = 0);
 
 /// <summary>
-/// Electricity-cost tracking (Alectra time-of-use). The three CAD totals accumulate from the power
+/// Electricity-cost tracking (Ontario Energy time-of-use). The three CAD totals accumulate from the power
 /// sensor integrated over time and priced at each interval's TOU rate: <see cref="TotalCad"/> is
 /// all-time since tracking began, <see cref="TodayCad"/> resets at local midnight, and
 /// <see cref="MonthCad"/> resets on the 1st. The current rate/period reflect "now" (with
@@ -765,7 +765,7 @@ public sealed record ElectricityBudgetSnapshot(
     string Status,
     // Which spend line paces the budget: the chosen basis ("all-in" sensor line or "ac-estimate"
     // static-TOU line) and what is actually in effect right now (all-in falls back to the
-    // sensor-free estimate while the Alectra sensor is stale, so budgeting never silently stalls).
+    // sensor-free estimate while the Ontario Energy sensor is stale, so budgeting never silently stalls).
     string Basis = "all-in",
     string EffectiveBasis = "all-in");
 
@@ -1377,9 +1377,9 @@ public sealed class DefenderSettings
 
     /// <summary>
     /// What the month-to-date spend is measured against:
-    /// <c>all-in</c> = the whole-house out-of-pocket bill from the Alectra power sensor (needs the sensor);
-    /// <c>ac-estimate</c> = the sensor-free AC-only estimate (assumed load × static Alectra TOU prices),
-    /// so budgeting keeps working when the Alectra integration is down.
+    /// <c>all-in</c> = the whole-house out-of-pocket bill from the Ontario Energy power sensor (needs the sensor);
+    /// <c>ac-estimate</c> = the sensor-free AC-only estimate (assumed load × static Ontario Energy TOU prices),
+    /// so budgeting keeps working when the Ontario Energy integration is down.
     /// </summary>
     public string ElectricityBudgetBasis { get; set; } = "ac-estimate";
 

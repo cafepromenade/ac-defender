@@ -47,20 +47,20 @@ Optional Home Assistant entities:
 ```text
 HomeAssistant__WeatherEntityId=weather.home
 HomeAssistant__OutdoorTemperatureEntityId=sensor.outdoor_temperature
-HomeAssistant__UsagePowerEntityId=sensor.alectra_current_power
-HomeAssistant__UsageEnergyEntityId=sensor.alectra_energy_today
-HomeAssistant__UsageCostEntityId=sensor.alectra_cost_today
-HomeAssistant__UsageHourlyCostEntityId=sensor.alectra_hourly_cost
-HomeAssistant__UsageCurrentBillEntityId=sensor.alectra_current_bill
-HomeAssistant__UsageCurrentBillDueEntityId=sensor.alectra_current_bill_due
-HomeAssistant__UsageCurrentBillStatusEntityId=sensor.alectra_current_bill_status
+HomeAssistant__UsagePowerEntityId=sensor.ontario_energy_current_power
+HomeAssistant__UsageEnergyEntityId=sensor.ontario_energy_energy_today
+HomeAssistant__UsageCostEntityId=sensor.ontario_energy_cost_today
+HomeAssistant__UsageHourlyCostEntityId=sensor.ontario_energy_hourly_cost
+HomeAssistant__UsageCurrentBillEntityId=sensor.ontario_energy_current_bill
+HomeAssistant__UsageCurrentBillDueEntityId=sensor.ontario_energy_current_bill_due
+HomeAssistant__UsageCurrentBillStatusEntityId=sensor.ontario_energy_current_bill_status
 HomeAssistant__Username=optional-bookkeeping-only
 HomeAssistant__Password=optional-bookkeeping-only
 ```
 
 If `WeatherEntityId` is blank the app discovers the first `weather.*` entity; with no weather
 entity, `OutdoorTemperatureEntityId` can still provide outdoor temperature. The usage entities
-come from the Alectra integration; AC Defender only reads them once Home Assistant has
+come from the Ontario Energy integration; AC Defender only reads them once Home Assistant has
 created them, and historical usage needs the entity recorded by the recorder
 (`api/history/period`).
 

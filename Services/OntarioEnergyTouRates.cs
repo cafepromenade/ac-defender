@@ -9,8 +9,8 @@ public enum TouPeriod
 }
 
 /// <summary>
-/// The configurable Alectra Utilities time-of-use rate table (energy commodity portion, ¢/kWh).
-/// Defaults are the verified Alectra/OEB commodity rates; they can be overridden from configuration
+/// The configurable Ontario Energy time-of-use rate table (energy commodity portion, ¢/kWh).
+/// Defaults are the verified Ontario Energy/OEB commodity rates; they can be overridden from configuration
 /// when the OEB updates the rates. <see cref="AllInMultiplier"/> and <see cref="AllInAdderCentsPerKwh"/>
 /// let a caller approximate an all-in bill (delivery, regulatory, Ontario Electricity Rebate, HST),
 /// but default to 1.0 / 0.0 so the tracker reports the commodity cost only, as requested.
@@ -22,7 +22,7 @@ public sealed record TouRateTable(
     double AllInMultiplier,
     double AllInAdderCentsPerKwh)
 {
-    // Verified from alectrautilities.com — energy commodity portion, ¢/kWh (OEB TOU prices).
+    // Verified from oeb.ca — energy commodity portion, ¢/kWh (OEB TOU prices).
     public const double DefaultOnPeakCentsPerKwh = 20.3;
     public const double DefaultMidPeakCentsPerKwh = 15.7;
     public const double DefaultOffPeakCentsPerKwh = 9.8;
@@ -48,7 +48,7 @@ public sealed record TouRateTable(
 }
 
 /// <summary>
-/// Ontario/Alectra time-of-use schedule. Given a LOCAL wall-clock time it returns the TOU period,
+/// Ontario/Ontario Energy time-of-use schedule. Given a LOCAL wall-clock time it returns the TOU period,
 /// honouring summer/winter schedules, weekends, and Ontario statutory holidays (all off-peak).
 ///
 /// "Assume the most expensive rate when possible": whenever the period is determinable we use the
@@ -56,7 +56,7 @@ public sealed record TouRateTable(
 /// to On-Peak — the most expensive rate — so cost is never under-estimated. The fallback is explicit
 /// via the <c>usedFallback</c> out parameter.
 /// </summary>
-public static class AlectraTouSchedule
+public static class OntarioEnergyTouSchedule
 {
     // TOU hour boundaries (24h local). Off-peak covers 19:00–07:00 in both seasons.
     private const int OffPeakEndHour = 7;   // 07:00 — off-peak (overnight) ends
@@ -116,7 +116,7 @@ public static class AlectraTouSchedule
         return GetPeriod(time);
     }
 
-    /// <summary>Human label for a TOU period (matches the Alectra wording).</summary>
+    /// <summary>Human label for a TOU period (matches the Ontario Energy wording).</summary>
     public static string PeriodLabel(TouPeriod period) => period switch
     {
         TouPeriod.OnPeak => "On-Peak",
@@ -125,7 +125,7 @@ public static class AlectraTouSchedule
     };
 
     /// <summary>
-    /// True if the date is an Ontario statutory holiday observed as off-peak by the OEB/Alectra:
+    /// True if the date is an Ontario statutory holiday observed as off-peak by the OEB/Ontario Energy:
     /// New Year's, Family Day, Good Friday, Victoria Day, Canada Day, Civic Holiday, Labour Day,
     /// Thanksgiving, Christmas, and Boxing Day. Fixed-date holidays that fall on a weekend are
     /// observed on the next weekday (the "bumped" weekday is the off-peak day).

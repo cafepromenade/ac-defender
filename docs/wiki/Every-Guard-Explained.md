@@ -228,7 +228,7 @@ dollars under the hours, and every day's box on the calendar.
 **Usage calendar.** A month of little boxes, colored like airline ticket prices: green
 days were cheap, red days were expensive. Click any day; total any range.
 
-**Alectra Peak Power Saver.** When electricity is at its most expensive, don't ask the AC
+**Ontario Energy Peak Power Saver.** When electricity is at its most expensive, don't ask the AC
 for *extra* cold unless the room truly needs it.
 
 **Monthly budget.** Tell it how much you want to spend this month. Spending too fast? The

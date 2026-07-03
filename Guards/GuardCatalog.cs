@@ -490,7 +490,7 @@ public static class GuardCatalog
         new GuardInfo(
             "Telemetry Alibi", GuardCategory.Sensor,
             "Waits for a normal Home Assistant/weather/usage update before a safe correction, so the nudge is not an isolated event.",
-            "Recent wall touches, real Home Assistant reading beats, weather samples, Alectra usage updates, and room temperature.",
+            "Recent wall touches, real Home Assistant reading beats, weather samples, Ontario Energy usage updates, and room temperature.",
             "After repeated wall touches, while the room is still inside the safety band, it starts a short quiet hold and then waits for the next enabled real telemetry signal. A too-warm room, direct comfort need, matching setpoint, disabled signal source, or max wait clears the hold.",
             "Delays only safe corrections until a normal house telemetry update can act as cover.",
             ["TelemetryAlibiEnabled", "TelemetryAlibiTriggerTouches", "TelemetryAlibiMinimumHoldSeconds", "TelemetryAlibiMaxHoldMinutes", "TelemetryAlibiSafetyBandCelsius", "TelemetryAlibiUseWeather", "TelemetryAlibiUseSensorBeat", "TelemetryAlibiUsePeakPower"],
@@ -707,9 +707,9 @@ public static class GuardCatalog
             }),
 
         new GuardInfo(
-            "Alectra Peak Power Saver", GuardCategory.System,
-            "Makes the defender more chill and resource-saving when Alectra reports on-peak, high price, or high power use.",
-            "Alectra current TOU period, current price, current power, and current plan sensors from Home Assistant.",
+            "Ontario Energy Peak Power Saver", GuardCategory.System,
+            "Makes the defender more chill and resource-saving when Ontario Energy reports on-peak, high price, or high power use.",
+            "Ontario Energy current TOU period, current price, current power, and current plan sensors from Home Assistant.",
             "When enabled, On-peak TOU, price above the c/kWh threshold, or current power above the kW threshold arms a short saver window. During that window it holds only safe cooling commands that would demand more cooling, and it can set the configured fan saver mode if the room is still inside the safety band. If the room or upstairs gets too hot, or the command would save energy by warming the setpoint, it steps aside.",
             "Holds safe cooling during expensive/high-load periods and prefers the saver fan mode.",
             ["PeakPowerSaverEnabled", "PeakPowerSaverOnPeakEnabled", "PeakPowerSaverHighPowerEnabled", "PeakPowerSaverPowerThresholdKilowatts", "PeakPowerSaverPriceThresholdCentsPerKwh", "PeakPowerSaverHoldMinutes", "PeakPowerSaverSafetyBandCelsius", "PeakPowerSaverFanSaverEnabled", "PeakPowerSaverFanMode"],
@@ -724,7 +724,7 @@ public static class GuardCatalog
                 [
                     new("Power", p.CurrentPowerKilowatts is { } kw ? $"{kw:0.00} kW" : "--", $"Threshold {p.PowerThresholdKilowatts:0.0} kW."),
                     new("Price", p.CurrentPriceCentsPerKwh is { } cents ? $"{cents:0.0} c/kWh" : "--", $"Threshold {p.PriceThresholdCentsPerKwh:0.0} c/kWh."),
-                    new("TOU", p.TouPeriod, "Alectra current TOU period."),
+                    new("TOU", p.TouPeriod, "Ontario Energy current TOU period."),
                     new("Saver wait", p.Holding ? $"{p.SecondsRemaining}s" : p.Active ? "Armed" : "Ready", "Safe cooling hold window."),
                 ]);
             }),

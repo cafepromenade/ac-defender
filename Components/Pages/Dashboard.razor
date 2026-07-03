@@ -253,7 +253,7 @@
                         <div class="ops-runtime__label">LIFETIME</div>
                     </div>
                 </div>
-                <div class="helper-text" style="margin-top: 8px;">Real compressor time (hvac_action = cooling)@(Snapshot?.AcRuntime?.TrackingSince is { } since ? $", counted since {Format.ToToronto(since):yyyy-MM-dd}" : "").@(Snapshot?.AcRuntime?.EstimatedCostEnabled == true ? $" Cost estimated at {Snapshot?.AcRuntime?.AssumedKilowatts:0.0} kW assumed AC load × the Alectra time-of-use rate at each moment — no Alectra sensor needed." : "")</div>
+                <div class="helper-text" style="margin-top: 8px;">Real compressor time (hvac_action = cooling)@(Snapshot?.AcRuntime?.TrackingSince is { } since ? $", counted since {Format.ToToronto(since):yyyy-MM-dd}" : "").@(Snapshot?.AcRuntime?.EstimatedCostEnabled == true ? $" Cost estimated at {Snapshot?.AcRuntime?.AssumedKilowatts:0.0} kW assumed AC load × the Ontario Energy time-of-use rate at each moment — no Ontario Energy sensor needed." : "")</div>
             </div>
 
             @* direct orders *@
@@ -400,7 +400,7 @@
                 }
                 if (!string.IsNullOrWhiteSpace(Snapshot?.PeakPowerSaver.TouPeriod))
                 {
-                    bits.Add($"ALECTRA {Snapshot.PeakPowerSaver.TouPeriod.ToUpperInvariant()}");
+                    bits.Add($"ONTARIO ENERGY {Snapshot.PeakPowerSaver.TouPeriod.ToUpperInvariant()}");
                 }
                 foreach (var e in (Snapshot?.Events ?? Array.Empty<DefenderEvent>()).Take(4))
                 {

@@ -8,9 +8,9 @@
 <PageTitle>Energy - AC Defender</PageTitle>
 
 <MudStack Spacing="3">
-    <SectionCard Title="Alectra Command Tent"
-                 Subtitle="@AlectraStatusTitle"
-                 Help="Read-only energy intelligence from real Home Assistant Alectra entities. The defender uses this to be more chill during expensive or high-load power periods.">
+    <SectionCard Title="Ontario Energy Command Tent"
+                 Subtitle="@OntarioEnergyStatusTitle"
+                 Help="Read-only energy intelligence from real Home Assistant Ontario Energy entities. The defender uses this to be more chill during expensive or high-load power periods.">
         <Actions>
             <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" OnClick="RefreshNow" StartIcon="@Icons.Material.Filled.Refresh">Refresh intel</MudButton>
         </Actions>
@@ -20,11 +20,11 @@
                     <MudIcon Icon="@Icons.Material.Filled.ElectricBolt" />
                 </div>
                 <div class="energy-banner__main">
-                    <MudText Typo="Typo.h5">@AlectraStatusTitle</MudText>
+                    <MudText Typo="Typo.h5">@OntarioEnergyStatusTitle</MudText>
                     <MudText Class="helper-text">@State.Snapshot.PeakPowerSaver.Status</MudText>
                     <div class="energy-chip-row">
-                        <MudChip T="string" Color="@(State.Snapshot.PeakPowerSaver.Active ? Color.Warning : Color.Success)" Variant="Variant.Filled" Size="Size.Small">@AlectraGuardLabel</MudChip>
-                        <MudChip T="string" Color="Color.Default" Variant="Variant.Outlined" Size="Size.Small">@AlectraEntities.Count entities</MudChip>
+                        <MudChip T="string" Color="@(State.Snapshot.PeakPowerSaver.Active ? Color.Warning : Color.Success)" Variant="Variant.Filled" Size="Size.Small">@OntarioEnergyGuardLabel</MudChip>
+                        <MudChip T="string" Color="Color.Default" Variant="Variant.Outlined" Size="Size.Small">@OntarioEnergyEntities.Count entities</MudChip>
                         <MudChip T="string" Color="Color.Default" Variant="Variant.Outlined" Size="Size.Small">Usage @Format.ShortTime(_usage?.UpdatedAt)</MudChip>
                         <MudChip T="string" Color="Color.Default" Variant="Variant.Outlined" Size="Size.Small">History @Format.ShortTime(_usageHistoryUpdatedAt)</MudChip>
                     </div>
@@ -51,9 +51,9 @@
     <MudTabs Rounded="true" Elevation="0" Class="ops-tabs">
         <MudTabPanel Text="Overview" Icon="@Icons.Material.Filled.Dashboard">
             <MudStack Spacing="3" Class="mt-3">
-                <SectionCard Title="Electricity cost (Alectra TOU)"
+                <SectionCard Title="Electricity cost (Ontario Energy TOU)"
                              Subtitle="@CostSubtitle"
-                             Help="AC Defender integrates the Alectra power sensor over time and prices each interval at the current Alectra time-of-use rate. Totals are CAD dollars of the energy commodity portion only (no delivery, regulatory, rebate, or HST unless an all-in factor is configured).">
+                             Help="AC Defender integrates the Ontario Energy power sensor over time and prices each interval at the current Ontario Energy time-of-use rate. Totals are CAD dollars of the energy commodity portion only (no delivery, regulatory, rebate, or HST unless an all-in factor is configured).">
                     <MudGrid Spacing="2" Class="mt-1">
                         @foreach (var metric in CostMetrics)
                         {
@@ -96,7 +96,7 @@
 
                 <SectionCard Title="Energy overview"
                              Subtitle="Fast scan"
-                             Help="Main usage numbers, bill status, and Alectra guard status in one small dashboard.">
+                             Help="Main usage numbers, bill status, and Ontario Energy guard status in one small dashboard.">
                     <MudGrid Spacing="2" Class="mt-1">
                         @foreach (var metric in EnergyMetrics)
                         {
@@ -106,7 +106,7 @@
                 </SectionCard>
 
                 <SectionCard Title="Entity desks"
-                             Subtitle="What the Alectra squad found"
+                             Subtitle="What the Ontario Energy squad found"
                              Help="Entities are grouped so the important power, bill, plan, and guard signals are not mixed into one giant pile.">
                     @if (CategoryBreakdown.Count > 0)
                     {
@@ -128,22 +128,22 @@
                     }
                     else
                     {
-                        <MudText Class="helper-text">No Alectra entities found yet.</MudText>
+                        <MudText Class="helper-text">No Ontario Energy entities found yet.</MudText>
                     }
                 </SectionCard>
             </MudStack>
         </MudTabPanel>
 
-        <MudTabPanel Text="Alectra" Icon="@Icons.Material.Filled.Bolt">
+        <MudTabPanel Text="Ontario Energy" Icon="@Icons.Material.Filled.Bolt">
             <MudStack Spacing="3" Class="mt-3">
-                <SectionCard Title="Alectra"
+                <SectionCard Title="Ontario Energy"
                              Subtitle="Searchable power intelligence"
-                             Help="Use search and desk filters to find the exact Alectra Home Assistant entity without scrolling through everything.">
+                             Help="Use search and desk filters to find the exact Ontario Energy Home Assistant entity without scrolling through everything.">
                     <MudGrid Spacing="2" Class="mt-1">
                         <MudItem xs="12" md="7">
-                            <MudTextField @bind-Value="_alectraSearch"
+                            <MudTextField @bind-Value="_ontarioEnergySearch"
                                           Immediate="true"
-                                          Label="Search Alectra"
+                                          Label="Search Ontario Energy"
                                           HelperText="Type words like power, bill, price, plan, tou, sensor, switch, or the entity ID."
                                           Variant="Variant.Outlined"
                                           Margin="Margin.Dense"
@@ -151,30 +151,30 @@
                                           AdornmentIcon="@Icons.Material.Filled.Search" />
                         </MudItem>
                         <MudItem xs="12" md="4">
-                            <MudSelect T="string" @bind-Value="_alectraCategory" Label="Desk filter" HelperText="Pick one desk to shrink the table." Variant="Variant.Outlined" Margin="Margin.Dense">
+                            <MudSelect T="string" @bind-Value="_ontarioEnergyCategory" Label="Desk filter" HelperText="Pick one desk to shrink the table." Variant="Variant.Outlined" Margin="Margin.Dense">
                                 <MudSelectItem T="string" Value="@("All")">All desks</MudSelectItem>
-                                @foreach (var category in AlectraCategories)
+                                @foreach (var category in OntarioEnergyCategories)
                                 {
                                     <MudSelectItem T="string" Value="@category">@category</MudSelectItem>
                                 }
                             </MudSelect>
                         </MudItem>
                         <MudItem xs="12" md="1" Class="energy-clear-cell">
-                            <MudIconButton Icon="@Icons.Material.Filled.Clear" Color="Color.Default" Disabled="@string.IsNullOrWhiteSpace(_alectraSearch)" OnClick="ClearAlectraSearch" />
+                            <MudIconButton Icon="@Icons.Material.Filled.Clear" Color="Color.Default" Disabled="@string.IsNullOrWhiteSpace(_ontarioEnergySearch)" OnClick="ClearOntarioEnergySearch" />
                             <MudText Class="helper-text">Clear search.</MudText>
                         </MudItem>
                     </MudGrid>
 
                     <div class="energy-chip-row mt-2">
-                        <MudChip T="string" Color="Color.Info" Variant="Variant.Outlined" Size="Size.Small">@FilteredAlectraEntities.Count shown</MudChip>
-                        <MudChip T="string" Color="Color.Default" Variant="Variant.Outlined" Size="Size.Small">@_alectraCategory desk</MudChip>
+                        <MudChip T="string" Color="Color.Info" Variant="Variant.Outlined" Size="Size.Small">@FilteredOntarioEnergyEntities.Count shown</MudChip>
+                        <MudChip T="string" Color="Color.Default" Variant="Variant.Outlined" Size="Size.Small">@_ontarioEnergyCategory desk</MudChip>
                         <MudChip T="string" Color="Color.Default" Variant="Variant.Outlined" Size="Size.Small">Updated @Format.ShortTime(_usage?.UpdatedAt)</MudChip>
                     </div>
                 </SectionCard>
 
-                @if (FilteredAlectraGroups.Count > 0)
+                @if (FilteredOntarioEnergyGroups.Count > 0)
                 {
-                    @foreach (var group in FilteredAlectraGroups)
+                    @foreach (var group in FilteredOntarioEnergyGroups)
                     {
                         <SectionCard Title="@group.Category"
                                      Subtitle="@($"{group.Items.Count} entities")"
@@ -205,8 +205,8 @@
                 {
                     <SectionCard Title="No matches"
                                  Subtitle="Search party came back empty"
-                                 Help="Clear the search or pick All desks to see every Alectra entity Home Assistant exposes.">
-                        <MudText Class="helper-text">No Alectra entities match the current search and desk filter.</MudText>
+                                 Help="Clear the search or pick All desks to see every Ontario Energy entity Home Assistant exposes.">
+                        <MudText Class="helper-text">No Ontario Energy entities match the current search and desk filter.</MudText>
                     </SectionCard>
                 }
             </MudStack>
@@ -236,8 +236,8 @@
                 </SectionCard>
 
                 <SectionCard Title="Desk count chart"
-                             Subtitle="Alectra inventory"
-                             Help="A quick bar chart showing how the Home Assistant Alectra entities are split across desks.">
+                             Subtitle="Ontario Energy inventory"
+                             Help="A quick bar chart showing how the Home Assistant Ontario Energy entities are split across desks.">
                     @if (CategoryBreakdown.Count > 0)
                     {
                         <div class="energy-bar-chart energy-bar-chart--large">
@@ -266,10 +266,10 @@
 
         <MudTabPanel Text="Entity Table" Icon="@Icons.Material.Filled.TableRows">
             <MudStack Spacing="3" Class="mt-3">
-                <SectionCard Title="Alectra entity table"
-                             Subtitle="@($"{FilteredAlectraEntities.Count} shown")"
+                <SectionCard Title="Ontario Energy entity table"
+                             Subtitle="@($"{FilteredOntarioEnergyEntities.Count} shown")"
                              Help="The same filtered data in table form for fast scanning on desktop and compact stacked rows on mobile.">
-                    <MudTable Items="@FilteredAlectraEntities" Dense="true" Hover="true" Breakpoint="Breakpoint.Sm" Class="energy-table">
+                    <MudTable Items="@FilteredOntarioEnergyEntities" Dense="true" Hover="true" Breakpoint="Breakpoint.Sm" Class="energy-table">
                         <HeaderContent>
                             <MudTh>Desk</MudTh>
                             <MudTh>Name</MudTh>
@@ -287,7 +287,7 @@
                             <MudTd DataLabel="Updated">@Format.ShortTime(context.LastChanged)</MudTd>
                         </RowTemplate>
                         <NoRecordsContent>
-                            <MudText Class="helper-text">No Alectra entities match the current search.</MudText>
+                            <MudText Class="helper-text">No Ontario Energy entities match the current search.</MudText>
                         </NoRecordsContent>
                     </MudTable>
                 </SectionCard>
@@ -297,7 +297,7 @@
             <MudStack Spacing="3" Class="mt-3">
                 <SectionCard Title="AC usage calendar"
                              Subtitle="@CalendarSubtitle"
-                             Help="An airline fare-style calendar for the AC: every day shows real compressor hours and the estimated AC-only cost (assumed load × the Alectra time-of-use rate in force at each moment — no Alectra sensor needed). Cheap days are green, expensive days run to red, exactly like a flight price calendar. Click a day for details, use the arrows for other months, or pick a range below for totals.">
+                             Help="An airline fare-style calendar for the AC: every day shows real compressor hours and the estimated AC-only cost (assumed load × the Ontario Energy time-of-use rate in force at each moment — no Ontario Energy sensor needed). Cheap days are green, expensive days run to red, exactly like a flight price calendar. Click a day for details, use the arrows for other months, or pick a range below for totals.">
                     <Actions>
                         <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" OnClick="ReloadLedger" StartIcon="@Icons.Material.Filled.Refresh">Reload</MudButton>
                     </Actions>
@@ -373,13 +373,13 @@
     private DateTimeOffset? _usageHistoryUpdatedAt;
     private string? _usageError;
     private string? _usageHistoryError;
-    private string _alectraSearch = string.Empty;
-    private string _alectraCategory = AllCategories;
+    private string _ontarioEnergySearch = string.Empty;
+    private string _ontarioEnergyCategory = AllCategories;
     private DateTimeOffset _nextUsageRefresh = DateTimeOffset.MinValue;
     private DateTimeOffset _nextUsageHistoryRefresh = DateTimeOffset.MinValue;
 
-    private IReadOnlyList<UsageEntityReading> AlectraEntities =>
-        _usage?.AlectraEntities ?? Array.Empty<UsageEntityReading>();
+    private IReadOnlyList<UsageEntityReading> OntarioEnergyEntities =>
+        _usage?.OntarioEnergyEntities ?? Array.Empty<UsageEntityReading>();
 
     private PeakPowerSaverSnapshot PeakPower => State.Snapshot.PeakPowerSaver;
 
@@ -404,13 +404,13 @@
         new("THIS MONTH (all-in)", Cad(Cost.AllInMonthCad), "Out-of-pocket estimate for this month so far, including delivery/regulatory/OER/HST."),
         new("TODAY (all-in)", Cad(Cost.AllInTodayCad), "Out-of-pocket estimate for today so far, including delivery/regulatory/OER/HST."),
         new("Current rate", $"{Cost.CurrentRateCentsPerKwh:0.###} c/kWh", $"{Cost.CurrentPeriod} rate right now. On {Cost.OnPeakCentsPerKwh:0.#} / Mid {Cost.MidPeakCentsPerKwh:0.#} / Off {Cost.OffPeakCentsPerKwh:0.#} c/kWh."),
-        new("TOU period", Cost.CurrentPeriod, "Current Alectra time-of-use period computed from Toronto local time (weekends and Ontario holidays are off-peak)."),
+        new("TOU period", Cost.CurrentPeriod, "Current Ontario Energy time-of-use period computed from Toronto local time (weekends and Ontario holidays are off-peak)."),
     ];
 
     private string AllInNote =>
         $"All-in = (commodity + delivery + regulatory) × (1 − OER {Cost.OntarioRebatePercent:P1}) × (1 + HST {Cost.HstPercent:P0}). " +
         $"Delivery ${Cost.DeliveryFixedDollarsPerMonth:0.##}/mo fixed + {Cost.DeliveryVariableCentsPerKwh:0.##} c/kWh, regulatory {Cost.RegulatoryCentsPerKwh:0.##} c/kWh. " +
-        "Delivery and regulatory numbers vary per customer — copy the exact values from your Alectra bill for a precise figure.";
+        "Delivery and regulatory numbers vary per customer — copy the exact values from your Ontario Energy bill for a precise figure.";
 
     private IReadOnlyList<MetricItem> BudgetMetrics =>
     [
@@ -420,16 +420,16 @@
         new("Projected month-end", Cad(Budget.ProjectedMonthEndCad), "Simple projection: month-to-date spend extrapolated to the full month."),
         new("Over / under", (Budget.OverUnderCad >= 0 ? "+" : "") + Cad(Budget.OverUnderCad), "Positive means running ahead of (over) the pro-rated budget pace."),
         new("Cooling ease", $"+{Budget.CurrentSetpointOffsetCelsius:0.0} C", $"Current budget-driven warmer-setpoint offset. Safety guardrail: {Budget.SafetyMaxCelsius:0.0} C."),
-        new("Pacing basis", Budget.EffectiveBasis, "ac-estimate = AC-only static Alectra TOU prices (sensor-free); all-in = whole-house bill from the live Alectra sensor. All-in falls back to the estimate while the sensor is stale."),
+        new("Pacing basis", Budget.EffectiveBasis, "ac-estimate = AC-only static Ontario Energy TOU prices (sensor-free); all-in = whole-house bill from the live Ontario Energy sensor. All-in falls back to the estimate while the sensor is stale."),
     ];
 
-    private string AlectraStatusTitle => PeakPower.Holding
-        ? "Alectra says: hold the icy orders"
+    private string OntarioEnergyStatusTitle => PeakPower.Holding
+        ? "Ontario Energy says: hold the icy orders"
         : PeakPower.Active
-            ? "Alectra says: power is spicy"
-            : "Alectra says: power looks calm";
+            ? "Ontario Energy says: power is spicy"
+            : "Ontario Energy says: power looks calm";
 
-    private string AlectraGuardLabel => PeakPower.Holding
+    private string OntarioEnergyGuardLabel => PeakPower.Holding
         ? "Saver holding"
         : PeakPower.Active
             ? "Saver armed"
@@ -467,8 +467,8 @@
         new("Current bill", Format.UsageValue(_usage?.CurrentBill), Format.UsageHelp(_usage?.CurrentBill)),
         new("Bill due", Format.UsageValue(_usage?.CurrentBillDue), Format.UsageHelp(_usage?.CurrentBillDue)),
         new("Bill status", Format.UsageValue(_usage?.CurrentBillStatus), Format.UsageHelp(_usage?.CurrentBillStatus)),
-        new("TOU period", BlankDash(PeakPower.TouPeriod), "Alectra current time-of-use period."),
-        new("Current plan", BlankDash(PeakPower.CurrentPlan), "Alectra current billing plan."),
+        new("TOU period", BlankDash(PeakPower.TouPeriod), "Ontario Energy current time-of-use period."),
+        new("Current plan", BlankDash(PeakPower.CurrentPlan), "Ontario Energy current billing plan."),
         new("Current price", PeakPower.CurrentPriceCentsPerKwh is null ? "--" : $"{PeakPower.CurrentPriceCentsPerKwh.Value:0.###} c/kWh", $"Saver threshold is {PeakPower.PriceThresholdCentsPerKwh:0.###} c/kWh."),
         new("Current power", PeakPower.CurrentPowerKilowatts is null ? "--" : $"{PeakPower.CurrentPowerKilowatts.Value:0.###} kW", $"Saver threshold is {PeakPower.PowerThresholdKilowatts:0.##} kW."),
         new("Usage updated", Format.ShortTime(_usage?.UpdatedAt), "When AC Defender last read usage sensors."),
@@ -483,42 +483,42 @@
         new("History updated", Format.ShortTime(_usageHistoryUpdatedAt), "When AC Defender last checked recorder history."),
     ];
 
-    private IReadOnlyList<string> AlectraCategories =>
-        AlectraEntities
+    private IReadOnlyList<string> OntarioEnergyCategories =>
+        OntarioEnergyEntities
             .Select(EntityCategory)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(CategoryOrder)
             .ThenBy(category => category, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-    private IReadOnlyList<UsageEntityReading> FilteredAlectraEntities =>
-        AlectraEntities
-            .Where(entity => _alectraCategory == AllCategories || EntityCategory(entity).Equals(_alectraCategory, StringComparison.OrdinalIgnoreCase))
-            .Where(entity => Format.MatchesSearch(_alectraSearch, entity.Name, entity.EntityId, entity.State, entity.Unit, EntityCategory(entity)))
+    private IReadOnlyList<UsageEntityReading> FilteredOntarioEnergyEntities =>
+        OntarioEnergyEntities
+            .Where(entity => _ontarioEnergyCategory == AllCategories || EntityCategory(entity).Equals(_ontarioEnergyCategory, StringComparison.OrdinalIgnoreCase))
+            .Where(entity => Format.MatchesSearch(_ontarioEnergySearch, entity.Name, entity.EntityId, entity.State, entity.Unit, EntityCategory(entity)))
             .OrderBy(entity => CategoryOrder(EntityCategory(entity)))
             .ThenBy(entity => entity.Name, StringComparer.OrdinalIgnoreCase)
             .ThenBy(entity => entity.EntityId, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-    private IReadOnlyList<AlectraEntityGroup> FilteredAlectraGroups =>
-        FilteredAlectraEntities
+    private IReadOnlyList<OntarioEnergyEntityGroup> FilteredOntarioEnergyGroups =>
+        FilteredOntarioEnergyEntities
             .GroupBy(EntityCategory)
             .OrderBy(group => CategoryOrder(group.Key))
             .ThenBy(group => group.Key, StringComparer.OrdinalIgnoreCase)
-            .Select(group => new AlectraEntityGroup(group.Key, group.ToArray()))
+            .Select(group => new OntarioEnergyEntityGroup(group.Key, group.ToArray()))
             .ToArray();
 
     private IReadOnlyList<CategoryMetric> CategoryBreakdown
     {
         get
         {
-            var total = AlectraEntities.Count;
+            var total = OntarioEnergyEntities.Count;
             if (total == 0)
             {
                 return Array.Empty<CategoryMetric>();
             }
 
-            return AlectraEntities
+            return OntarioEnergyEntities
                 .GroupBy(EntityCategory)
                 .OrderBy(group => CategoryOrder(group.Key))
                 .ThenBy(group => group.Key, StringComparer.OrdinalIgnoreCase)
@@ -672,7 +672,7 @@
         {
             var runtime = State.Snapshot.AcRuntime;
             return runtime?.EstimatedCostEnabled == true
-                ? $"Hours + estimated cost at {runtime.AssumedKilowatts:0.0} kW × Alectra TOU"
+                ? $"Hours + estimated cost at {runtime.AssumedKilowatts:0.0} kW × Ontario Energy TOU"
                 : "Hours per day (cost estimate is off)";
         }
     }
@@ -781,7 +781,7 @@
         }
     }
 
-    private void ClearAlectraSearch() => _alectraSearch = string.Empty;
+    private void ClearOntarioEnergySearch() => _ontarioEnergySearch = string.Empty;
 
     private static string EntityCategory(UsageEntityReading entity)
     {
@@ -854,8 +854,8 @@
         "Live usage" => "Live power, energy, usage, and cost signals. The guard reads these before deciding whether safe cooling can wait.",
         "Guard signals" => "TOU, price, rate, and peak hints. These tell the defender when electricity is the hot zone.",
         "Bill desk" => "Bill, due-date, and balance style sensors. Useful for checking the wallet damage without leaving the guard post.",
-        "Plan controls" => "Alectra controls and selectors exposed by Home Assistant. This page shows them but does not change them.",
-        _ => "Extra Alectra entities that do not fit the main desks."
+        "Plan controls" => "Ontario Energy controls and selectors exposed by Home Assistant. This page shows them but does not change them.",
+        _ => "Extra Ontario Energy entities that do not fit the main desks."
     };
 
     private static string PercentStyle(double percent) =>
@@ -865,7 +865,7 @@
 
     public void Dispose() => State.Changed -= OnStateChanged;
 
-    private sealed record AlectraEntityGroup(string Category, IReadOnlyList<UsageEntityReading> Items);
+    private sealed record OntarioEnergyEntityGroup(string Category, IReadOnlyList<UsageEntityReading> Items);
 
     private sealed record CategoryMetric(string Category, int Count, double Percent);
 }

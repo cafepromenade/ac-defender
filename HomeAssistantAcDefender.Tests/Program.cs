@@ -48,7 +48,7 @@ tests.HvacActionAlibiWaitsForRealActionTransitionButBypassesHotRoom();
 tests.TelemetryAlibiWaitsForHouseSignalButBypassesHotRoom();
 tests.ComfortPaceWaitsAfterFrequentWallTouchesButBypassesHotRoom();
 tests.ComfortEnvelopeObservesSmallSafeWallPreferenceButBypassesHotRoom();
-tests.PeakPowerSaverHoldsSafeCoolingDuringAlectraOnPeakButBypassesHotRoom();
+tests.PeakPowerSaverHoldsSafeCoolingDuringOntarioEnergyOnPeakButBypassesHotRoom();
 tests.SuperDefenderClassifiesRemoteHomeAssistantChangesAndBypassesQuietTiming();
 tests.RemoteSettlingHoldsSafeRemotePatternButBypassesHotRoom();
 tests.EnforcerRestoresCoolWhenTurnedOffByAnotherPerson();
@@ -1688,14 +1688,14 @@ internal sealed class DefenderSetPointRegressionTests
 
     public void TouUnknownTimeFallsBackToOnPeakMostExpensive()
     {
-        var period = AlectraTouSchedule.GetPeriod((DateTime?)null, out var usedFallback);
+        var period = OntarioEnergyTouSchedule.GetPeriod((DateTime?)null, out var usedFallback);
         if (!usedFallback || period != TouPeriod.OnPeak)
         {
             throw new InvalidOperationException("An unknown time must fall back to the most expensive rate (On-Peak).");
         }
 
         // A known time must NOT report the fallback.
-        AlectraTouSchedule.GetPeriod(new DateTime(2026, 7, 4, 13, 0, 0, DateTimeKind.Local), out var knownFallback);
+        OntarioEnergyTouSchedule.GetPeriod(new DateTime(2026, 7, 4, 13, 0, 0, DateTimeKind.Local), out var knownFallback);
         if (knownFallback)
         {
             throw new InvalidOperationException("A known local time must not use the On-Peak fallback.");
@@ -1869,7 +1869,7 @@ internal sealed class DefenderSetPointRegressionTests
             var offPeakNightTime = new DateTimeOffset(new DateTime(2026, 7, 16, 22, 0, 0, DateTimeKind.Local));
 
             // Seed $80 month-to-date against a $50 pro-rated target ($100 × 0.5) → $30 over pace.
-            // Mark the Alectra sensor FRESH so the seeded all-in basis is what paces the budget
+            // Mark the Ontario Energy sensor FRESH so the seeded all-in basis is what paces the budget
             // (a stale sensor would reliably fall back to the AC-only estimate instead).
             SetRuntimeProperty(store, "ElectricityAllInSubtotalMonthCad", 80.0);
             SetRuntimeProperty(store, "ElectricityCostLastSampleAt", offPeakNightTime);
@@ -1940,7 +1940,7 @@ internal sealed class DefenderSetPointRegressionTests
                 SetRuntimeProperty(store, "ElectricityAllInSubtotalMonthCad", 40.0); // whole-house line
                 SetRuntimeProperty(store, "AcEstimatedCostMonthCad", 80.0);          // AC-only static-TOU line
 
-                // Options-era seeding chooses the all-in basis, but the Alectra sensor has NO fresh
+                // Options-era seeding chooses the all-in basis, but the Ontario Energy sensor has NO fresh
                 // sample here — reliability rule: fall back to the AC-only estimate, never stall.
                 var stale = store.GetBudgetStatus(24.0, onPeakNoon);
                 if (!stale.EffectiveBasis.Contains("ac-estimate", StringComparison.Ordinal)
@@ -2046,7 +2046,7 @@ internal sealed class DefenderSetPointRegressionTests
 
     private static void AssertPeriod(TouPeriod expected, DateTime localTime, string message)
     {
-        var actual = AlectraTouSchedule.GetPeriod(localTime);
+        var actual = OntarioEnergyTouSchedule.GetPeriod(localTime);
         if (actual != expected)
         {
             throw new InvalidOperationException($"{message} Expected {expected}, got {actual} at {localTime:yyyy-MM-dd HH:mm ddd}.");
@@ -4116,7 +4116,7 @@ internal sealed class DefenderSetPointRegressionTests
         }
     }
 
-    public void PeakPowerSaverHoldsSafeCoolingDuringAlectraOnPeakButBypassesHotRoom()
+    public void PeakPowerSaverHoldsSafeCoolingDuringOntarioEnergyOnPeakButBypassesHotRoom()
     {
         using var fixture = DefenderStoreFixture.Create();
         var store = fixture.Store;
@@ -4134,7 +4134,7 @@ internal sealed class DefenderSetPointRegressionTests
         settings.PeakPowerSaverFanMode = "auto";
         SetRuntimeProperty(store, "Settings", settings);
 
-        store.RecordAlectraPeakPowerReading(new AlectraPeakPowerReading(
+        store.RecordOntarioEnergyPeakPowerReading(new OntarioEnergyPeakPowerReading(
             true,
             1.8,
             15.8,
@@ -4163,7 +4163,7 @@ internal sealed class DefenderSetPointRegressionTests
             DateTimeOffset.UtcNow,
             out var holdUntil,
             out var holdMessage);
-        if (!holdsSafeCooling || holdUntil is null || !holdMessage.Contains("Alectra Peak Power Saver", StringComparison.OrdinalIgnoreCase))
+        if (!holdsSafeCooling || holdUntil is null || !holdMessage.Contains("Ontario Energy Peak Power Saver", StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidOperationException("Peak Power Saver should hold a safe cooling command during On-peak/high-price usage.");
         }
@@ -4197,7 +4197,7 @@ internal sealed class DefenderSetPointRegressionTests
             || snapshot.PeakPowerSaver.CurrentPriceCentsPerKwh != 15.8
             || snapshot.PeakPowerSaver.TouPeriod != "On-peak")
         {
-            throw new InvalidOperationException("Peak Power Saver status should expose the live Alectra price and TOU period.");
+            throw new InvalidOperationException("Peak Power Saver status should expose the live Ontario Energy price and TOU period.");
         }
     }
 

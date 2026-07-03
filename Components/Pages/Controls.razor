@@ -85,9 +85,9 @@
         </ChildContent>
     </SectionCard>
 
-    <SectionCard Title="Alectra Peak Power Saver"
+    <SectionCard Title="Ontario Energy Peak Power Saver"
                  Subtitle="@(Snapshot?.PeakPowerSaver.Active == true ? "Saving" : "Watching")"
-                 Help="Uses real Alectra power, price, and TOU sensors to hold only safe cooling during peak or high-load periods.">
+                 Help="Uses real Ontario Energy power, price, and TOU sensors to hold only safe cooling during peak or high-load periods.">
         <Actions>
             <MudChip T="string" Color="@(Snapshot?.PeakPowerSaver.Holding == true ? Color.Warning : Snapshot?.PeakPowerSaver.Active == true ? Color.Info : Color.Default)" Variant="Variant.Outlined" Size="Size.Small">
                 @(Snapshot?.PeakPowerSaver.Holding == true ? "Holding" : Snapshot?.PeakPowerSaver.Active == true ? "Peak" : "Ready")

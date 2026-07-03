@@ -262,9 +262,9 @@ public sealed class AcDefenderService
                 var fanMode = stateStore.GetPeakPowerFanSaverMode();
                 await homeAssistantClient.SetFanModeAsync(reading.EntityId, fanMode, cancellationToken);
                 stateStore.RecordCommand(
-                    $"Home Assistant {reading.EntityId} fan set to {fanMode} for Alectra Peak Power Saver.",
+                    $"Home Assistant {reading.EntityId} fan set to {fanMode} for Ontario Energy Peak Power Saver.",
                     commandedFanMode: fanMode,
-                    commandSourceDetail: "AC Defender adjusted fan mode for Alectra Peak Power Saver.");
+                    commandSourceDetail: "AC Defender adjusted fan mode for Ontario Energy Peak Power Saver.");
             }
             else if (stateStore.ShouldUseFanSaver(reading))
             {
@@ -483,7 +483,7 @@ public sealed class AcDefenderService
         }
     }
 
-    // Sample the Alectra power sensor every cycle and accrue electricity cost at the current TOU rate.
+    // Sample the Ontario Energy power sensor every cycle and accrue electricity cost at the current TOU rate.
     // Independent of the Peak Power Saver guard so cost keeps tracking even when the guard is off.
     private async Task AccumulateElectricityCostAsync(CancellationToken cancellationToken)
     {
@@ -508,12 +508,12 @@ public sealed class AcDefenderService
 
         try
         {
-            stateStore.RecordAlectraPeakPowerReading(await homeAssistantClient.GetAlectraPeakPowerAsync(cancellationToken));
+            stateStore.RecordOntarioEnergyPeakPowerReading(await homeAssistantClient.GetOntarioEnergyPeakPowerAsync(cancellationToken));
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            logger.LogWarning(ex, "Alectra peak power status refresh failed");
-            stateStore.RecordAlectraPeakPowerUnavailable(ex.Message);
+            logger.LogWarning(ex, "Ontario Energy peak power status refresh failed");
+            stateStore.RecordOntarioEnergyPeakPowerUnavailable(ex.Message);
         }
     }
 

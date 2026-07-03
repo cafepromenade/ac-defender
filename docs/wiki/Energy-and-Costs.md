@@ -13,10 +13,10 @@ one of them never does:
 | | Whole-house (commodity + all-in) | AC-only estimate |
 | --- | --- | --- |
 | What it measures | Everything the house uses | Just the AC |
-| Data source | Alectra power sensor (live watts) | Real compressor runtime (`hvac_action = cooling`) |
-| Price used | Alectra TOU rate at each moment | Same TOU rates (static, from config) |
+| Data source | Ontario Energy power sensor (live watts) | Real compressor runtime (`hvac_action = cooling`) |
+| Price used | Ontario Energy TOU rate at each moment | Same TOU rates (static, from config) |
 | Load used | Measured | Assumed: `AcEstimatedAmps × AcEstimatedVolts` (default 30 A × 240 V = 7.2 kW) |
-| Works when Alectra is down? | No | **Yes** |
+| Works when Ontario Energy is down? | No | **Yes** |
 | Where shown | Energy → Overview | Dashboard, under AC RUNTIME; Energy → Calendar |
 
 Both lines bank into **today / this month / lifetime** buckets (Toronto-local midnight and
@@ -26,9 +26,9 @@ downtime is never billed.
 > The 30 A breaker rating is a ceiling, not a measurement. For a tighter estimate set
 > `AcEstimatedAmps` to your unit's nameplate running load (often 17–24 A).
 
-## Alectra time-of-use rates
+## Ontario Energy time-of-use rates
 
-The rate engine (`Services/AlectraTouRates.cs`) knows the full Ontario schedule:
+The rate engine (`Services/OntarioEnergyTouRates.cs`) knows the full Ontario schedule:
 
 | Period | Rate (¢/kWh) |
 | --- | --- |
@@ -50,7 +50,7 @@ The all-in "out of pocket" line adds the rest of a real Ontario bill:
 all_in = (commodity + delivery_fixed + delivery_variable + regulatory) × (1 − OER) × (1 + HST)
 ```
 
-Copy the delivery/regulatory numbers from your own Alectra bill for a precise figure.
+Copy the delivery/regulatory numbers from your own Ontario Energy bill for a precise figure.
 
 Full configuration (`Defender` section, `appsettings.json` / environment):
 
@@ -62,9 +62,9 @@ Full configuration (`Defender` section, `appsettings.json` / environment):
 "ElectricityAllInMultiplier": 1.0,        // simple all-in scaler on the commodity rate (optional)
 "ElectricityAllInAdderCentsPerKwh": 0.0,
 
-"ElectricityDeliveryFixedDollarsPerMonth": 30.0,   // copy from your Alectra bill
-"ElectricityDeliveryVariableCentsPerKwh": 5.0,     // copy from your Alectra bill
-"ElectricityRegulatoryCentsPerKwh": 0.7,           // copy from your Alectra bill
+"ElectricityDeliveryFixedDollarsPerMonth": 30.0,   // copy from your Ontario Energy bill
+"ElectricityDeliveryVariableCentsPerKwh": 5.0,     // copy from your Ontario Energy bill
+"ElectricityRegulatoryCentsPerKwh": 0.7,           // copy from your Ontario Energy bill
 "ElectricityOntarioRebatePercent": 0.235,          // OER, applied before HST
 "ElectricityHstPercent": 0.13,
 
@@ -104,13 +104,13 @@ month-to-date spend against `budget × fraction-of-month-elapsed`:
 
 **Pacing basis & the reliability rule:** the budget can measure spend on the whole-house
 `all-in` line (needs the live sensor) or the sensor-free `ac-estimate` line (static TOU
-prices). If `all-in` is chosen but no fresh Alectra sample arrives for 15 minutes, it
+prices). If `all-in` is chosen but no fresh Ontario Energy sample arrives for 15 minutes, it
 **automatically falls back** to the estimate — shown as *"ac-estimate (sensor stale)"* on
-the Energy page — so budgeting never silently stalls while Alectra is down.
+the Energy page — so budgeting never silently stalls while Ontario Energy is down.
 
 ## Related pages
 
 - [Website Tour](Website-Tour.md) — what every page looks like.
 - [Settings](Settings.md) — all the knobs.
 - [Defender Logic](Defender-Logic.md) — the guards that act on these signals
-  (Alectra Peak Power Saver, Rival Schedule Watch, night cooling budget…).
+  (Ontario Energy Peak Power Saver, Rival Schedule Watch, night cooling budget…).

@@ -111,11 +111,11 @@ api.MapGet("/usage/live", async (HomeAssistantClient homeAssistantClient, Cancel
         return Results.BadRequest(new { error = ex.Message });
     }
 });
-api.MapGet("/usage/alectra", async (HomeAssistantClient homeAssistantClient, CancellationToken cancellationToken) =>
+api.MapGet("/usage/ontario_energy", async (HomeAssistantClient homeAssistantClient, CancellationToken cancellationToken) =>
 {
     try
     {
-        return Results.Ok(await homeAssistantClient.GetAlectraEntitiesAsync(cancellationToken));
+        return Results.Ok(await homeAssistantClient.GetOntarioEnergyEntitiesAsync(cancellationToken));
     }
     catch (Exception ex)
     {

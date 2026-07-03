@@ -73,7 +73,7 @@ public sealed class DefenderStateStore
             state.Settings.ElectricityBudgetMaxSetpointOffsetCelsius = Math.Clamp(options.ElectricityBudgetMaxSetpointOffsetCelsius, 0.0, 5.0);
             state.Settings.ElectricityBudgetSafetyMaxCelsius = options.ElectricityBudgetSafetyMaxCelsius;
             // Historical default: options-era budgeting paced on the sensor-based all-in line. The
-            // stale-sensor fallback below keeps that reliable even when Alectra is down.
+            // stale-sensor fallback below keeps that reliable even when Ontario Energy is down.
             state.Settings.ElectricityBudgetBasis = "all-in";
             SaveState();
         }
@@ -402,7 +402,7 @@ public sealed class DefenderStateStore
                 : request.PeakPowerSaverFanMode.Trim();
             if (!state.Settings.PeakPowerSaverEnabled)
             {
-                ClearPeakPowerSaver("Alectra Peak Power Saver is off.");
+                ClearPeakPowerSaver("Ontario Energy Peak Power Saver is off.");
             }
             state.Settings.FrontDoorKillSwitchEnabled = request.FrontDoorKillSwitchEnabled;
             state.Settings.FrontDoorPersonEntityIds = request.FrontDoorPersonEntityIds?.Trim() ?? string.Empty;
@@ -779,28 +779,28 @@ public sealed class DefenderStateStore
         {
             if (!state.Settings.PeakPowerSaverEnabled)
             {
-                ClearPeakPowerSaver("Alectra Peak Power Saver is off.");
+                ClearPeakPowerSaver("Ontario Energy Peak Power Saver is off.");
                 return false;
             }
 
-            if (state.AlectraPeakPower is null)
+            if (state.OntarioEnergyPeakPower is null)
             {
                 return true;
             }
 
             var refreshSeconds = Math.Clamp(state.Settings.PeakPowerSaverRefreshSeconds, 30, 3600);
-            return now - state.AlectraPeakPower.UpdatedAt >= TimeSpan.FromSeconds(refreshSeconds);
+            return now - state.OntarioEnergyPeakPower.UpdatedAt >= TimeSpan.FromSeconds(refreshSeconds);
         }
     }
 
-    public DefenderSnapshot RecordAlectraPeakPowerReading(AlectraPeakPowerReading reading)
+    public DefenderSnapshot RecordOntarioEnergyPeakPowerReading(OntarioEnergyPeakPowerReading reading)
     {
         lock (gate)
         {
-            state.AlectraPeakPower = reading;
+            state.OntarioEnergyPeakPower = reading;
             if (!state.Settings.PeakPowerSaverEnabled)
             {
-                ClearPeakPowerSaver("Alectra Peak Power Saver is off.");
+                ClearPeakPowerSaver("Ontario Energy Peak Power Saver is off.");
                 state.UpdatedAt = DateTimeOffset.UtcNow;
                 SaveState();
                 return CreateSnapshot();
@@ -810,16 +810,16 @@ public sealed class DefenderStateStore
             {
                 var wasActive = IsPeakPowerSaverActive(DateTimeOffset.UtcNow);
                 state.PeakPowerSaverUntil = DateTimeOffset.UtcNow.AddMinutes(Math.Max(1, state.Settings.PeakPowerSaverHoldMinutes));
-                state.PeakPowerSaverStatus = $"Alectra Peak Power Saver active: {BuildPeakPowerSummary(reading)}.";
+                state.PeakPowerSaverStatus = $"Ontario Energy Peak Power Saver active: {BuildPeakPowerSummary(reading)}.";
                 if (!wasActive)
                 {
-                    AddEvent("warning", $"Alectra Peak Power Saver active: {BuildPeakPowerSummary(reading)}.");
+                    AddEvent("warning", $"Ontario Energy Peak Power Saver active: {BuildPeakPowerSummary(reading)}.");
                 }
             }
             else
             {
                 state.PeakPowerSaverUntil = null;
-                state.PeakPowerSaverStatus = $"Alectra power is normal: {BuildPeakPowerSummary(reading)}.";
+                state.PeakPowerSaverStatus = $"Ontario Energy power is normal: {BuildPeakPowerSummary(reading)}.";
             }
 
             state.UpdatedAt = DateTimeOffset.UtcNow;
@@ -828,13 +828,13 @@ public sealed class DefenderStateStore
         }
     }
 
-    public DefenderSnapshot RecordAlectraPeakPowerUnavailable(string message)
+    public DefenderSnapshot RecordOntarioEnergyPeakPowerUnavailable(string message)
     {
         lock (gate)
         {
-            state.AlectraPeakPower = null;
+            state.OntarioEnergyPeakPower = null;
             state.PeakPowerSaverUntil = null;
-            state.PeakPowerSaverStatus = $"Alectra Peak Power Saver could not read usage sensors: {message}";
+            state.PeakPowerSaverStatus = $"Ontario Energy Peak Power Saver could not read usage sensors: {message}";
             state.UpdatedAt = DateTimeOffset.UtcNow;
             SaveState();
             return CreateSnapshot();
@@ -1418,12 +1418,12 @@ public sealed class DefenderStateStore
 
             // Estimated AC-only cost: this cooling slice at the assumed load (amps × volts), priced
             // at the TOU rate in force at the interval START — same convention as the whole-house
-            // electricity tracker. Needs no Alectra sensor, so it keeps working when Alectra is down.
+            // electricity tracker. Needs no Ontario Energy sensor, so it keeps working when Ontario Energy is down.
             var costCad = 0.0;
             if (options.AcCostEstimateEnabled && AcEstimatedKilowatts() > 0)
             {
                 var energyKwh = AcEstimatedKilowatts() * deltaSeconds / 3600.0;
-                var period = AlectraTouSchedule.GetPeriod(lastSample.ToLocalTime().DateTime);
+                var period = OntarioEnergyTouSchedule.GetPeriod(lastSample.ToLocalTime().DateTime);
                 costCad = energyKwh * BuildRateTable().EffectiveCentsPerKwh(period) / 100.0;
                 state.AcEstimatedCostTodayCad += costCad;
                 state.AcEstimatedCostMonthCad += costCad;
@@ -1486,7 +1486,7 @@ public sealed class DefenderStateStore
         Math.Max(0, options.AcEstimatedAmps) * Math.Max(0, options.AcEstimatedVolts) / 1000.0;
 
     /// <summary>
-    /// Builds the configured Alectra TOU rate table (commodity ¢/kWh plus the optional all-in factor)
+    /// Builds the configured Ontario Energy TOU rate table (commodity ¢/kWh plus the optional all-in factor)
     /// from <see cref="DefenderOptions"/>, so the OEB rates can be updated without a code change.
     /// </summary>
     private TouRateTable BuildRateTable() => new(
@@ -1497,7 +1497,7 @@ public sealed class DefenderStateStore
         options.ElectricityAllInAdderCentsPerKwh);
 
     /// <summary>
-    /// Records the latest Alectra power reading (kW) and accrues its cost. Sample the power sensor each
+    /// Records the latest Ontario Energy power reading (kW) and accrues its cost. Sample the power sensor each
     /// cycle; passing null (sensor missing) safely resets the interval so a gap is not billed later.
     /// </summary>
     public DefenderSnapshot RecordElectricityCostSample(double? powerKilowatts, DateTimeOffset? nowOverride = null)
@@ -1512,7 +1512,7 @@ public sealed class DefenderStateStore
     }
 
     // Cost accounting: integrate the power sensor (kW) over time into energy (kWh), price each interval
-    // at its Alectra TOU rate, and bank the dollars into today / this-month / lifetime buckets
+    // at its Ontario Energy TOU rate, and bank the dollars into today / this-month / lifetime buckets
     // (Toronto-local rollover). Deltas are capped at 2 minutes so app downtime or missed polls never
     // over-count. The interval is priced at the TOU period of its START (the last sample), which for a
     // ~5s poll is effectively "now"; an unknown time falls back to On-Peak (most expensive).
@@ -1553,7 +1553,7 @@ public sealed class DefenderStateStore
             var averageKw = powerKilowatts is { } currentKw ? (lastPowerKw + currentKw) / 2.0 : lastPowerKw;
             var energyKwh = Math.Max(0, averageKw) * deltaHours;
 
-            var period = AlectraTouSchedule.GetPeriod(lastSample.ToLocalTime().DateTime);
+            var period = OntarioEnergyTouSchedule.GetPeriod(lastSample.ToLocalTime().DateTime);
             var commodityCad = energyKwh * BuildRateTable().EffectiveCentsPerKwh(period) / 100.0;
 
             // Pre-tax all-in subtotal for this interval: commodity + per-kWh delivery/regulatory + the
@@ -1595,7 +1595,7 @@ public sealed class DefenderStateStore
         var table = BuildRateTable();
         // "Current" rate/period reflect now; a known local time is always determinable, so the fallback
         // only triggers if the clock itself is unavailable.
-        var period = AlectraTouSchedule.GetPeriod(DateTimeOffset.UtcNow.ToLocalTime().DateTime, out var usedFallback);
+        var period = OntarioEnergyTouSchedule.GetPeriod(DateTimeOffset.UtcNow.ToLocalTime().DateTime, out var usedFallback);
         return new ElectricityCostSnapshot(
             options.ElectricityCostTrackingEnabled,
             Math.Round(state.ElectricityCostLifetimeCad, 2),
@@ -1604,7 +1604,7 @@ public sealed class DefenderStateStore
             Math.Round(state.ElectricityEnergyLifetimeKwh, 3),
             Math.Round(state.ElectricityEnergyTodayKwh, 3),
             Math.Round(state.ElectricityEnergyMonthKwh, 3),
-            AlectraTouSchedule.PeriodLabel(period),
+            OntarioEnergyTouSchedule.PeriodLabel(period),
             Math.Round(table.EffectiveCentsPerKwh(period), 3),
             usedFallback,
             table.OnPeakCentsPerKwh,
@@ -1632,10 +1632,10 @@ public sealed class DefenderStateStore
         return Math.Clamp(elapsedDays / daysInMonth, 0.0, 1.0);
     }
 
-    // The all-in basis needs live Alectra power samples; consider the sensor stale after this long.
+    // The all-in basis needs live Ontario Energy power samples; consider the sensor stale after this long.
     private static readonly TimeSpan BudgetSensorFreshWindow = TimeSpan.FromMinutes(15);
 
-    // True while the Alectra power sensor is actually feeding the whole-house tracker.
+    // True while the Ontario Energy power sensor is actually feeding the whole-house tracker.
     private bool ElectricitySensorFresh(DateTimeOffset now) =>
         state.ElectricityCostLastPowerKilowatts is not null
         && state.ElectricityCostLastSampleAt is { } lastAt
@@ -1643,7 +1643,7 @@ public sealed class DefenderStateStore
 
     // Which spend line the budget paces on RIGHT NOW. The chosen basis is a setting; reliability
     // rule: "all-in" (whole-house, sensor-based) automatically falls back to "ac-estimate" (assumed
-    // load × static Alectra TOU prices, sensor-free) while the Alectra sensor is stale — the budget
+    // load × static Ontario Energy TOU prices, sensor-free) while the Ontario Energy sensor is stale — the budget
     // must never silently pace on a flatlined number.
     private (string EffectiveBasis, double MonthToDate) ResolveBudgetBasis(DateTimeOffset now)
     {
@@ -1686,7 +1686,7 @@ public sealed class DefenderStateStore
         // How far over pace, as a fraction of the pro-rated target (capped at 100% over).
         var pressure = Math.Clamp(overUnder / Math.Max(proRatedTarget, 0.01), 0.0, 1.0);
         // Prefer holding off during the expensive periods: weight the bias by how costly "now" is.
-        var period = AlectraTouSchedule.GetPeriod(local);
+        var period = OntarioEnergyTouSchedule.GetPeriod(local);
         var periodWeight = period switch
         {
             TouPeriod.OnPeak => 1.0,
@@ -1900,7 +1900,7 @@ public sealed class DefenderStateStore
                 {
                     var end = ordered[i + 1].Timestamp < costCutoff ? ordered[i + 1].Timestamp : costCutoff;
                     var seconds = Math.Clamp((end - ordered[i].Timestamp).TotalSeconds, 0, 900);
-                    var period = AlectraTouSchedule.GetPeriod(local.DateTime);
+                    var period = OntarioEnergyTouSchedule.GetPeriod(local.DateTime);
                     var costCad = AcEstimatedKilowatts() * seconds / 3600.0 * rateTable.EffectiveCentsPerKwh(period) / 100.0;
                     costLifetime += costCad;
                     if (sameMonth)
@@ -1922,7 +1922,7 @@ public sealed class DefenderStateStore
                     var seconds = Math.Clamp((end - ordered[i].Timestamp).TotalSeconds, 0, 900);
                     var costCad = options.AcCostEstimateEnabled && AcEstimatedKilowatts() > 0
                         ? AcEstimatedKilowatts() * seconds / 3600.0
-                            * rateTable.EffectiveCentsPerKwh(AlectraTouSchedule.GetPeriod(local.DateTime)) / 100.0
+                            * rateTable.EffectiveCentsPerKwh(OntarioEnergyTouSchedule.GetPeriod(local.DateTime)) / 100.0
                         : 0.0;
                     AddToDailyLedger(local.ToString("yyyy-MM-dd"), seconds, costCad);
                 }
@@ -2728,7 +2728,7 @@ public sealed class DefenderStateStore
 
     private bool IsPeakPowerNow()
     {
-        var tou = state.AlectraPeakPower?.TouPeriod;
+        var tou = state.OntarioEnergyPeakPower?.TouPeriod;
         return !string.IsNullOrWhiteSpace(tou) && tou.Contains("peak", StringComparison.OrdinalIgnoreCase)
             && !tou.Contains("off", StringComparison.OrdinalIgnoreCase);
     }
@@ -5818,27 +5818,27 @@ public sealed class DefenderStateStore
             message = string.Empty;
             if (!state.Settings.PeakPowerSaverEnabled)
             {
-                state.PeakPowerSaverStatus = "Alectra Peak Power Saver is off.";
+                state.PeakPowerSaverStatus = "Ontario Energy Peak Power Saver is off.";
                 return false;
             }
 
             if (!IsPeakPowerSaverActive(now))
             {
-                state.PeakPowerSaverStatus = state.AlectraPeakPower is null
-                    ? "Alectra Peak Power Saver is waiting for usage data."
-                    : $"Alectra power is normal: {BuildPeakPowerSummary(state.AlectraPeakPower)}.";
+                state.PeakPowerSaverStatus = state.OntarioEnergyPeakPower is null
+                    ? "Ontario Energy Peak Power Saver is waiting for usage data."
+                    : $"Ontario Energy power is normal: {BuildPeakPowerSummary(state.OntarioEnergyPeakPower)}.";
                 return false;
             }
 
             if (bypassQuietTiming)
             {
-                state.PeakPowerSaverStatus = "Alectra Peak Power Saver is stepping aside because comfort safety is bypassing quiet timing.";
+                state.PeakPowerSaverStatus = "Ontario Energy Peak Power Saver is stepping aside because comfort safety is bypassing quiet timing.";
                 return false;
             }
 
             if (expectedSetPoint >= reading.SetPointCelsius - 0.05)
             {
-                state.PeakPowerSaverStatus = "Alectra Peak Power Saver is allowing this command because it will not demand more cooling.";
+                state.PeakPowerSaverStatus = "Ontario Energy Peak Power Saver is allowing this command because it will not demand more cooling.";
                 return false;
             }
 
@@ -5851,7 +5851,7 @@ public sealed class DefenderStateStore
             }
 
             until = state.PeakPowerSaverUntil ?? now.AddMinutes(Math.Max(1, state.Settings.PeakPowerSaverHoldMinutes));
-            message = $"Alectra Peak Power Saver is holding safe cooling until {until.Value.ToLocalTime():HH:mm:ss}: {BuildPeakPowerSummary(state.AlectraPeakPower)}.";
+            message = $"Ontario Energy Peak Power Saver is holding safe cooling until {until.Value.ToLocalTime():HH:mm:ss}: {BuildPeakPowerSummary(state.OntarioEnergyPeakPower)}.";
             state.PeakPowerSaverStatus = message;
             return true;
         }
@@ -7555,9 +7555,9 @@ public sealed class DefenderStateStore
             Consider(state.HomeAssistantReadingTimes.LastOrDefault(), "Home Assistant sensor beat");
         }
 
-        if (state.Settings.TelemetryAlibiUsePeakPower && state.AlectraPeakPower?.UpdatedAt is { } usageAt)
+        if (state.Settings.TelemetryAlibiUsePeakPower && state.OntarioEnergyPeakPower?.UpdatedAt is { } usageAt)
         {
-            Consider(usageAt, "Alectra usage update");
+            Consider(usageAt, "Ontario Energy usage update");
         }
 
         return latest;
@@ -8910,17 +8910,17 @@ public sealed class DefenderStateStore
             saved.WeatherDriftStatus = "Weather drift guard is watching.";
         }
         saved.PeakPowerSaverStatus = string.IsNullOrWhiteSpace(saved.PeakPowerSaverStatus)
-            ? "Alectra Peak Power Saver is watching usage sensors."
+            ? "Ontario Energy Peak Power Saver is watching usage sensors."
             : saved.PeakPowerSaverStatus;
         if (!saved.Settings.PeakPowerSaverEnabled)
         {
             saved.PeakPowerSaverUntil = null;
-            saved.PeakPowerSaverStatus = "Alectra Peak Power Saver is off.";
+            saved.PeakPowerSaverStatus = "Ontario Energy Peak Power Saver is off.";
         }
         else if (saved.PeakPowerSaverUntil is { } peakUntil && peakUntil <= DateTimeOffset.UtcNow)
         {
             saved.PeakPowerSaverUntil = null;
-            saved.PeakPowerSaverStatus = "Alectra Peak Power Saver is watching usage sensors.";
+            saved.PeakPowerSaverStatus = "Ontario Energy Peak Power Saver is watching usage sensors.";
         }
         saved.FrontDoorKillSwitchStatus = string.IsNullOrWhiteSpace(saved.FrontDoorKillSwitchStatus)
             ? "Front-door guard post is armed."
@@ -9079,9 +9079,9 @@ public sealed class DefenderStateStore
             : 0;
         if (peakPowerSaverSeconds == 0 && state.PeakPowerSaverUntil is not null)
         {
-            ClearPeakPowerSaver("Alectra Peak Power Saver is watching usage sensors.");
+            ClearPeakPowerSaver("Ontario Energy Peak Power Saver is watching usage sensors.");
         }
-        var peakPowerReasons = BuildPeakPowerReasons(state.AlectraPeakPower);
+        var peakPowerReasons = BuildPeakPowerReasons(state.OntarioEnergyPeakPower);
         var peakPowerActive = state.Settings.PeakPowerSaverEnabled
             && peakPowerSaverSeconds > 0
             && peakPowerReasons.Count > 0;
@@ -9642,17 +9642,17 @@ public sealed class DefenderStateStore
                 peakPowerActive && !string.IsNullOrWhiteSpace(state.PeakPowerSaverStatus) && state.PeakPowerSaverStatus.Contains("holding", StringComparison.OrdinalIgnoreCase),
                 state.Settings.PeakPowerSaverFanSaverEnabled,
                 peakPowerSaverSeconds,
-                state.AlectraPeakPower?.CurrentPowerKilowatts,
+                state.OntarioEnergyPeakPower?.CurrentPowerKilowatts,
                 state.Settings.PeakPowerSaverPowerThresholdKilowatts,
-                state.AlectraPeakPower?.CurrentPriceCentsPerKwh,
+                state.OntarioEnergyPeakPower?.CurrentPriceCentsPerKwh,
                 state.Settings.PeakPowerSaverPriceThresholdCentsPerKwh,
-                string.IsNullOrWhiteSpace(state.AlectraPeakPower?.TouPeriod) ? "--" : state.AlectraPeakPower!.TouPeriod!,
-                string.IsNullOrWhiteSpace(state.AlectraPeakPower?.CurrentPlan) ? "--" : state.AlectraPeakPower!.CurrentPlan!,
+                string.IsNullOrWhiteSpace(state.OntarioEnergyPeakPower?.TouPeriod) ? "--" : state.OntarioEnergyPeakPower!.TouPeriod!,
+                string.IsNullOrWhiteSpace(state.OntarioEnergyPeakPower?.CurrentPlan) ? "--" : state.OntarioEnergyPeakPower!.CurrentPlan!,
                 string.IsNullOrWhiteSpace(state.PeakPowerSaverStatus)
-                    ? "Alectra Peak Power Saver is watching usage sensors."
+                    ? "Ontario Energy Peak Power Saver is watching usage sensors."
                     : state.PeakPowerSaverStatus,
                 peakPowerSaverSeconds > 0 ? state.PeakPowerSaverUntil : null,
-                state.AlectraPeakPower?.UpdatedAt),
+                state.OntarioEnergyPeakPower?.UpdatedAt),
             new SuperDefenderSnapshot(
                 state.Settings.SuperDefenderModeEnabled,
                 superDefenderSeconds > 0,
@@ -10143,7 +10143,7 @@ public sealed class DefenderStateStore
         return true;
     }
 
-    private List<string> BuildPeakPowerReasons(AlectraPeakPowerReading? reading)
+    private List<string> BuildPeakPowerReasons(OntarioEnergyPeakPowerReading? reading)
     {
         var reasons = new List<string>();
         if (reading is null || !reading.HomeAssistantConfigured)
@@ -10174,11 +10174,11 @@ public sealed class DefenderStateStore
         return reasons;
     }
 
-    private string BuildPeakPowerSummary(AlectraPeakPowerReading? reading)
+    private string BuildPeakPowerSummary(OntarioEnergyPeakPowerReading? reading)
     {
         if (reading is null)
         {
-            return "waiting for Alectra usage sensors";
+            return "waiting for Ontario Energy usage sensors";
         }
 
         if (!reading.HomeAssistantConfigured)
@@ -10706,7 +10706,7 @@ public sealed class DefenderStateStore
         public DateTimeOffset? AcRuntimeBackfilledAt { get; set; }
 
         // Estimated AC-only cost (no sensor needed): cooling runtime × assumed amps×volts load,
-        // priced at the Alectra TOU rate in force at each moment. CAD $, same Toronto-local
+        // priced at the Ontario Energy TOU rate in force at each moment. CAD $, same Toronto-local
         // day/month rollover keys as the runtime counters above.
         public double AcEstimatedCostTodayCad { get; set; }
 
@@ -10727,7 +10727,7 @@ public sealed class DefenderStateStore
 
         public DateTimeOffset? AcLedgerBackfilledAt { get; set; }
 
-        // Electricity-cost accounting (Alectra TOU), Toronto-local day/month rollover. Cost is in CAD $,
+        // Electricity-cost accounting (Ontario Energy TOU), Toronto-local day/month rollover. Cost is in CAD $,
         // energy in kWh. Deltas are capped so app downtime / missed polls never over-count.
         public double ElectricityCostTodayCad { get; set; }
 
@@ -11086,11 +11086,11 @@ public sealed class DefenderStateStore
 
         public string WeatherDriftStatus { get; set; } = "Weather drift guard is watching.";
 
-        public AlectraPeakPowerReading? AlectraPeakPower { get; set; }
+        public OntarioEnergyPeakPowerReading? OntarioEnergyPeakPower { get; set; }
 
         public DateTimeOffset? PeakPowerSaverUntil { get; set; }
 
-        public string PeakPowerSaverStatus { get; set; } = "Alectra Peak Power Saver is watching usage sensors.";
+        public string PeakPowerSaverStatus { get; set; } = "Ontario Energy Peak Power Saver is watching usage sensors.";
 
         public List<FrontDoorPersonReading> FrontDoorPersonReadings { get; set; } = [];
 

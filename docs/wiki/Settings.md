@@ -146,12 +146,12 @@ The MudBlazor settings page controls defender behavior without editing configura
 - Transition window seconds: how recently a real action change can count as the alibi.
 - Max alibi minutes: longest safe wait for a real action change.
 - Alibi safe band C: extra warmth allowed before HVAC alibi stops waiting.
-- Telemetry alibi: waits for normal Home Assistant, weather, or Alectra telemetry before a safe correction.
+- Telemetry alibi: waits for normal Home Assistant, weather, or Ontario Energy telemetry before a safe correction.
 - Telemetry alibi touches: external thermostat touches needed before telemetry alibi can wait.
 - Quiet hold seconds: short safe delay before a telemetry signal can release the wait.
 - Telemetry max wait minutes: longest safe wait for a real telemetry signal.
 - Telemetry safe band C: extra warmth allowed before telemetry alibi stops waiting.
-- Use weather / sensor beat / Alectra: which real telemetry sources count as cover.
+- Use weather / sensor beat / Ontario Energy: which real telemetry sources count as cover.
 - Cooling runway: waits after Home Assistant reports that cooling started.
 - Runway wait seconds: smallest wait after cooling starts.
 - Runway pressure seconds: extra wait added when wall touches or helper commands pile up.
@@ -182,9 +182,9 @@ The MudBlazor settings page controls defender behavior without editing configura
 
 When enabled, the app can set a configured Home Assistant fan mode when the room is close to target. This is optional and depends on the climate entity exposing supported `fan_modes`.
 
-## Alectra Peak Power Saver
+## Ontario Energy Peak Power Saver
 
-When enabled, the app uses real Alectra sensors to hold only safe cooling during expensive or high-load power periods.
+When enabled, the app uses real Ontario Energy sensors to hold only safe cooling during expensive or high-load power periods.
 
 Settings include:
 
@@ -199,14 +199,14 @@ Settings include:
 - Saver fan mode
 - Peak fan mode
 
-## Energy And Alectra Page
+## Energy And Ontario Energy Page
 
-The Energy page is read-only except for refresh. It organizes real Home Assistant Alectra data into tabs so you do not need to scroll through one giant list.
+The Energy page is read-only except for refresh. It organizes real Home Assistant Ontario Energy data into tabs so you do not need to scroll through one giant list.
 
 - Refresh intel: asks Home Assistant for current usage and history again. It does not touch the thermostat.
 - Overview tab: shows the main power, energy, bill, TOU, plan, price, and peak-saver numbers.
-- Alectra tab: shows a search box, a desk filter, grouped entity cards, and helper text under the controls.
-- Search Alectra: type words like power, bill, price, plan, TOU, switch, or an entity ID to shrink the results.
+- Ontario Energy tab: shows a search box, a desk filter, grouped entity cards, and helper text under the controls.
+- Search Ontario Energy: type words like power, bill, price, plan, TOU, switch, or an entity ID to shrink the results.
 - Desk filter: shows only one group, such as Live usage, Guard signals, Bill desk, Plan controls, or Other signals.
 - Clear search: empties the search box.
 - Charts tab: shows a 24-hour Home Assistant recorder line chart and an entity-count bar chart.
@@ -260,8 +260,8 @@ Settings → Electricity budget (see [Energy & Costs](Energy-and-Costs.md) for t
 - **Aggressiveness (0–1)** — how hard to lean when over pace.
 - **Max warmer offset (C)** — hard cap on how much warmer the budget may let the room run.
 - **Safety max room temp (C)** — at/above this room temperature the budget is ignored entirely.
-- **Spend measured as** — `ac-estimate` (AC-only, static Alectra TOU prices, sensor-free) or
-  `all-in` (whole-house bill from the live Alectra sensor, with an automatic fallback to the
+- **Spend measured as** — `ac-estimate` (AC-only, static Ontario Energy TOU prices, sensor-free) or
+  `all-in` (whole-house bill from the live Ontario Energy sensor, with an automatic fallback to the
   estimate while the sensor is stale).
 
 These are UI-owned: the matching `ElectricityBudget*` appsettings values only seed them once on

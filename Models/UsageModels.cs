@@ -16,11 +16,11 @@ public sealed record UsageLiveSnapshot(
     UsageEntityReading? CurrentBill,
     UsageEntityReading? CurrentBillDue,
     UsageEntityReading? CurrentBillStatus,
-    IReadOnlyList<UsageEntityReading> AlectraEntities,
+    IReadOnlyList<UsageEntityReading> OntarioEnergyEntities,
     bool HomeAssistantConfigured,
     DateTimeOffset UpdatedAt);
 
-public sealed record AlectraPeakPowerReading(
+public sealed record OntarioEnergyPeakPowerReading(
     bool HomeAssistantConfigured,
     double? CurrentPowerKilowatts,
     double? CurrentPriceCentsPerKwh,

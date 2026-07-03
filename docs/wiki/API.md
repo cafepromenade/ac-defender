@@ -6,7 +6,7 @@
 GET /api/status
 GET /api/settings
 GET /api/usage/live
-GET /api/usage/alectra
+GET /api/usage/ontario_energy
 GET /api/usage/history
 GET /api/status/stream
 ```
@@ -43,11 +43,11 @@ The status snapshot includes:
 - `setpointStillness`: stable wall-setpoint reading status, hold seconds, stable sample count, required samples, current reported setpoint, and expiry time.
 - `sensorRhythm`: Home Assistant reading cadence status, wait seconds, learned median interval, sample count, and due time.
 - `hvacActionAlibi`: real HVAC action transition timing status, wait seconds, current action, recent touch count, last transition time, and expiry time.
-- `telemetryAlibi`: real Home Assistant/weather/Alectra telemetry timing status, wait seconds, latest signal, recent touch count, and expiry time.
+- `telemetryAlibi`: real Home Assistant/weather/Ontario Energy telemetry timing status, wait seconds, latest signal, recent touch count, and expiry time.
 - `coolingRunway`: fresh-cooling hold status, wait seconds, pressure, cooling start time, and expiry time.
 - `roomTrend`: real room trend direction, delta, sample count, hold status, and remaining hold seconds.
 - `thermalMomentum`: real cooling rate, estimated minutes to target, hold status, and remaining hold seconds.
-- `peakPowerSaver`: Alectra peak/high-price/high-power status, hold seconds, current kW, current c/kWh, TOU period, plan, thresholds, fan-saver flag, and latest usage timestamp.
+- `peakPowerSaver`: Ontario Energy peak/high-price/high-power status, hold seconds, current kW, current c/kWh, TOU period, plan, thresholds, fan-saver flag, and latest usage timestamp.
 - `superDefender`: repeated Home Assistant user/phone or automation change status, active flag, strict wait bypass flag, recent remote-change count, last source, remaining seconds, and manual-only network-lockdown warning.
 - `remoteSettling`: quiet hold status after repeated Home Assistant-side changes, recent remote-change count, trigger count, last source, remaining seconds, and expiry time.
 - `coolingFailure`: mega-alert status, active seconds, alert count, suspected time, next repeat alert time, and status message.
@@ -58,14 +58,14 @@ The status snapshot includes:
 
 ```text
 GET /api/usage/live
-GET /api/usage/alectra
+GET /api/usage/ontario_energy
 GET /api/usage/history?hours=24
-GET /api/usage/history?entityId=sensor.alectra_energy_today&from=2026-06-05T00:00:00Z&to=2026-06-05T23:59:59Z
+GET /api/usage/history?entityId=sensor.ontario_energy_energy_today&from=2026-06-05T00:00:00Z&to=2026-06-05T23:59:59Z
 ```
 
-`/api/usage/live` returns the configured Home Assistant usage sensors for current power, daily energy, hourly cost, daily cost, current bill, bill due date, bill fetch status, and an `alectraEntities` list containing every Home Assistant entity whose entity ID contains `alectra`. The Energy page uses this payload for the Alectra overview, search, desk filters, grouped cards, and table.
+`/api/usage/live` returns the configured Home Assistant usage sensors for current power, daily energy, hourly cost, daily cost, current bill, bill due date, bill fetch status, and an `ontarioEnergyEntities` list containing every Home Assistant entity whose entity ID contains `ontario_energy`. The Energy page uses this payload for the Ontario Energy overview, search, desk filters, grouped cards, and table.
 
-`/api/usage/alectra` returns only the full Alectra entity list used by the Energy dashboard.
+`/api/usage/ontario_energy` returns only the full Ontario Energy entity list used by the Energy dashboard.
 
 `/api/usage/history` reads Home Assistant recorder history for the configured energy entity by default. Pass `entityId` to inspect another sensor, `hours` for a window ending now, or explicit `from` and `to` timestamps. The Energy page chart uses this endpoint and labels samples in Toronto 24-hour time.
 
@@ -78,7 +78,7 @@ POST /api/defender
 POST /api/settings
 ```
 
-`POST /api/settings` accepts the automation, Comfort Sync, Human Nudge, Command Camouflage, Stealth Governor, Comfort Pace, Tug-of-War Truce, Comfort Envelope, Setpoint Stillness, HVAC Alibi, Telemetry Alibi, Alectra Peak Power Saver, Front-door Guard Post, Super Defender, Remote Settling, fan saver, upstairs comfort, presence, and schedule settings used by the MudBlazor settings page.
+`POST /api/settings` accepts the automation, Comfort Sync, Human Nudge, Command Camouflage, Stealth Governor, Comfort Pace, Tug-of-War Truce, Comfort Envelope, Setpoint Stillness, HVAC Alibi, Telemetry Alibi, Ontario Energy Peak Power Saver, Front-door Guard Post, Super Defender, Remote Settling, fan saver, upstairs comfort, presence, and schedule settings used by the MudBlazor settings page.
 
 ## Real Thermostat Commands
 

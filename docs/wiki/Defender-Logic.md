@@ -27,10 +27,10 @@ sequence. The first guard that wants to wait stops the cycle and reports its nex
 9. **Upstairs Comfort Guard** lowers the target and adds boost when upstairs is hot.
 10. Decide whether **severe upstairs heat**, **Cooler Intent Fast Lane**, or **Super Defender** should bypass quiet timing.
 11. **Wall Settling**, **Conflict Quiet**, **Manual Comfort Grace**, and **Dynamic Cooldown** may each hold.
-12. **Alectra Peak Power Saver** makes safe cooling more chill during On-peak, high-price, or high-power usage.
+12. **Ontario Energy Peak Power Saver** makes safe cooling more chill during On-peak, high-price, or high-power usage.
 13. **Fan Energy Saver** moves the fan to a saver mode when near target.
 14. Compute the **expected setpoint**: 1 C below room when the room is warm.
-15. If the setpoint needs to change, walk the timing guards in order: **Alectra Peak Power Saver -> Comfort Envelope -> Tug-of-War Truce -> Room Trend -> Thermal Momentum -> Weather Drift -> Setpoint Echo -> Setpoint Stillness -> Remote Settling -> Cooling Runway -> Sensor Rhythm -> HVAC Alibi -> Telemetry Alibi -> Comfort Sync -> Comfort Pace -> Routine Timing -> Comfort Budget -> Command Camouflage -> Stealth Governor -> Visibility Guard -> Natural Cadence**.
+15. If the setpoint needs to change, walk the timing guards in order: **Ontario Energy Peak Power Saver -> Comfort Envelope -> Tug-of-War Truce -> Room Trend -> Thermal Momentum -> Weather Drift -> Setpoint Echo -> Setpoint Stillness -> Remote Settling -> Cooling Runway -> Sensor Rhythm -> HVAC Alibi -> Telemetry Alibi -> Comfort Sync -> Comfort Pace -> Routine Timing -> Comfort Budget -> Command Camouflage -> Stealth Governor -> Visibility Guard -> Natural Cadence**.
 16. Shape the command size with **Natural Walkback**, **Touch Signature**, and **Human Nudge**, then **Repeat Quiet**.
 17. Send the corrected setpoint to Home Assistant.
 18. **Cooling Failure Watch** runs alongside and raises a mega-alert if cooling is demanded but not real.
@@ -259,7 +259,7 @@ Waits for a real HVAC action transition so a safe correction lands near a normal
 
 ### Telemetry Alibi
 Waits for a normal house telemetry update before a safe correction lands.
-- **Watches:** recent wall touches, Home Assistant reading beats, weather samples, Alectra usage updates, and room temperature.
+- **Watches:** recent wall touches, Home Assistant reading beats, weather samples, Ontario Energy usage updates, and room temperature.
 - **Logic:** after repeated wall touches, while the room is inside the safety band, it starts a short quiet hold and then waits for the next enabled real telemetry signal. A too-warm room, direct comfort need, matching expected setpoint, disabled signal source, or max wait clears it.
 - **Settings:** `TelemetryAlibiEnabled`, `TelemetryAlibiTriggerTouches`, `TelemetryAlibiMinimumHoldSeconds`, `TelemetryAlibiMaxHoldMinutes`, `TelemetryAlibiSafetyBandCelsius`, `TelemetryAlibiUseWeather`, `TelemetryAlibiUseSensorBeat`, `TelemetryAlibiUsePeakPower`.
 
@@ -297,9 +297,9 @@ Optionally moves the fan to an energy-saving mode when the room is near target.
 - **Logic:** when enabled and the room is within the threshold of target, if the configured fan mode exists on the device it calls `climate.set_fan_mode`.
 - **Settings:** `FanEnergySaverEnabled`, `FanEnergySaverThresholdCelsius`, `FanEnergySaverMode`.
 
-### Alectra Peak Power Saver
-Makes safe cooling more chill and resource-saving when Alectra says power is expensive or high.
-- **Logic:** the worker refreshes Alectra usage sensors on the configured interval. On-peak TOU, current price at or above the c/kWh threshold, or current power at or above the kW threshold arms the saver window. While active, it holds only safe commands that would demand more cooling, and can set the configured fan saver mode. If the room or upstairs gets too hot, or the command would save energy by raising the setpoint, it steps aside.
+### Ontario Energy Peak Power Saver
+Makes safe cooling more chill and resource-saving when Ontario Energy says power is expensive or high.
+- **Logic:** the worker refreshes Ontario Energy usage sensors on the configured interval. On-peak TOU, current price at or above the c/kWh threshold, or current power at or above the kW threshold arms the saver window. While active, it holds only safe commands that would demand more cooling, and can set the configured fan saver mode. If the room or upstairs gets too hot, or the command would save energy by raising the setpoint, it steps aside.
 - **Settings:** `PeakPowerSaverEnabled`, `PeakPowerSaverOnPeakEnabled`, `PeakPowerSaverHighPowerEnabled`, `PeakPowerSaverPowerThresholdKilowatts`, `PeakPowerSaverPriceThresholdCentsPerKwh`, `PeakPowerSaverHoldMinutes`, `PeakPowerSaverRefreshSeconds`, `PeakPowerSaverSafetyBandCelsius`, `PeakPowerSaverFanSaverEnabled`, `PeakPowerSaverFanMode`.
 
 ### Front-door Guard Post

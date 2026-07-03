@@ -153,7 +153,7 @@
                     </MudGrid>
                 </MudExpansionPanel>
             }
-            @if (Show("electricity budget monthly dollars spend pace alectra tou basis estimate cost")) {
+            @if (Show("electricity budget monthly dollars spend pace ontario_energy tou basis estimate cost")) {
                 <MudExpansionPanel Text="Electricity budget" Expanded="@IsSettingsSearchActive">
                     <MudGrid Spacing="2">
                         <SettingSwitch Label="Prefer staying inside a monthly budget" Value="_electricityBudgetEnabled" ValueChanged="@(v => SetDirty(v, x => _electricityBudgetEnabled = x))" Help="Each cycle the defender compares month-to-date spend against the pro-rated budget. Over pace: the room may run slightly warmer (biased to expensive on/mid-peak hours) to spend less. It is a preference, never a cutoff — the safety maximum below always wins, and it never cools below my temp." />
@@ -163,10 +163,10 @@
                         <SettingDouble Label="Safety max room temp (C)" Value="_electricityBudgetSafetyMaxCelsius" ValueChanged="@(v => SetDirty(v, x => _electricityBudgetSafetyMaxCelsius = x))" Min="24" Max="32" Step="0.5" Help="At/above this room temperature the budget is ignored entirely and cooling always wins." />
                         <MudItem xs="12" sm="8">
                             <MudSelect T="string" Value="_electricityBudgetBasis" ValueChanged="@(v => SetDirty(v, x => _electricityBudgetBasis = x))" Label="Spend measured as" Variant="Variant.Outlined" Margin="Margin.Dense">
-                                <MudSelectItem T="string" Value="@("ac-estimate")">AC-only estimate — static Alectra TOU prices, no sensor needed</MudSelectItem>
-                                <MudSelectItem T="string" Value="@("all-in")">Whole-house all-in bill — live Alectra sensor (auto-falls back to the estimate while the sensor is down)</MudSelectItem>
+                                <MudSelectItem T="string" Value="@("ac-estimate")">AC-only estimate — static Ontario Energy TOU prices, no sensor needed</MudSelectItem>
+                                <MudSelectItem T="string" Value="@("all-in")">Whole-house all-in bill — live Ontario Energy sensor (auto-falls back to the estimate while the sensor is down)</MudSelectItem>
                             </MudSelect>
-                            <MudText Class="helper-text">Reliability rule: if the whole-house basis has no fresh Alectra power sample for 15 minutes, the budget automatically paces on the AC-only static-price estimate instead of silently stalling.</MudText>
+                            <MudText Class="helper-text">Reliability rule: if the whole-house basis has no fresh Ontario Energy power sample for 15 minutes, the budget automatically paces on the AC-only static-price estimate instead of silently stalling.</MudText>
                         </MudItem>
                     </MudGrid>
                 </MudExpansionPanel>
@@ -584,7 +584,7 @@
                     </MudGrid>
                 </MudExpansionPanel>
             }
-            @if (Show("telemetry alibi weather sensor beat alectra usage house update cover")) {
+            @if (Show("telemetry alibi weather sensor beat ontario_energy usage house update cover")) {
                 <MudExpansionPanel Text="Telemetry alibi" Expanded="@IsSettingsSearchActive">
                     <MudGrid Spacing="2">
                         <SettingSwitch Label="Telemetry alibi" Value="_telemetryAlibiEnabled" ValueChanged="@(v => SetDirty(v, x => _telemetryAlibiEnabled = x))" Help="Wait for a normal house telemetry update before a safe correction." />
@@ -594,7 +594,7 @@
                         <SettingDouble Label="Safe band" Value="_telemetryAlibiSafetyBandCelsius" ValueChanged="@(v => SetDirty(v, x => _telemetryAlibiSafetyBandCelsius = x))" Min="0.1" Max="5" />
                         <SettingSwitch Label="Use weather" Value="_telemetryAlibiUseWeather" ValueChanged="@(v => SetDirty(v, x => _telemetryAlibiUseWeather = x))" Help="Let weather updates count as cover." />
                         <SettingSwitch Label="Use sensor beat" Value="_telemetryAlibiUseSensorBeat" ValueChanged="@(v => SetDirty(v, x => _telemetryAlibiUseSensorBeat = x))" Help="Let normal Home Assistant readings count as cover." />
-                        <SettingSwitch Label="Use Alectra" Value="_telemetryAlibiUsePeakPower" ValueChanged="@(v => SetDirty(v, x => _telemetryAlibiUsePeakPower = x))" Help="Let Alectra usage updates count as cover." />
+                        <SettingSwitch Label="Use Ontario Energy" Value="_telemetryAlibiUsePeakPower" ValueChanged="@(v => SetDirty(v, x => _telemetryAlibiUsePeakPower = x))" Help="Let Ontario Energy usage updates count as cover." />
                     </MudGrid>
                 </MudExpansionPanel>
             }
@@ -645,11 +645,11 @@
                     </MudGrid>
                 </MudExpansionPanel>
             }
-            @if (Show("alectra peak power saver on peak price kw resource saving chill")) {
-                <MudExpansionPanel Text="Alectra Peak Power Saver" Expanded="@IsSettingsSearchActive">
+            @if (Show("ontario_energy peak power saver on peak price kw resource saving chill")) {
+                <MudExpansionPanel Text="Ontario Energy Peak Power Saver" Expanded="@IsSettingsSearchActive">
                     <MudGrid Spacing="2">
-                        <SettingSwitch Label="Peak power saver" Value="_peakPowerSaverEnabled" ValueChanged="@(v => SetDirty(v, x => _peakPowerSaverEnabled = x))" Help="Make safe cooling more chill when Alectra says power is expensive or high." />
-                        <SettingSwitch Label="Use on-peak" Value="_peakPowerSaverOnPeakEnabled" ValueChanged="@(v => SetDirty(v, x => _peakPowerSaverOnPeakEnabled = x))" Help="Treat Alectra On-peak as a saver trigger." />
+                        <SettingSwitch Label="Peak power saver" Value="_peakPowerSaverEnabled" ValueChanged="@(v => SetDirty(v, x => _peakPowerSaverEnabled = x))" Help="Make safe cooling more chill when Ontario Energy says power is expensive or high." />
+                        <SettingSwitch Label="Use on-peak" Value="_peakPowerSaverOnPeakEnabled" ValueChanged="@(v => SetDirty(v, x => _peakPowerSaverOnPeakEnabled = x))" Help="Treat Ontario Energy On-peak as a saver trigger." />
                         <SettingSwitch Label="Use high kW" Value="_peakPowerSaverHighPowerEnabled" ValueChanged="@(v => SetDirty(v, x => _peakPowerSaverHighPowerEnabled = x))" Help="Treat high current power as a saver trigger." />
                         <SettingDouble Label="Power threshold" Unit="kW" Value="_peakPowerSaverPowerThresholdKilowatts" ValueChanged="@(v => SetDirty(v, x => _peakPowerSaverPowerThresholdKilowatts = x))" Min="0.1" Max="50" />
                         <SettingDouble Label="Price threshold" Unit="c/kWh" Value="_peakPowerSaverPriceThresholdCentsPerKwh" ValueChanged="@(v => SetDirty(v, x => _peakPowerSaverPriceThresholdCentsPerKwh = x))" Min="0" Max="200" />
