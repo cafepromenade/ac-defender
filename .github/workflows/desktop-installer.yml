@@ -1,0 +1,67 @@
+name: Desktop installer
+
+# Builds the Tauri desktop app (React + TypeScript + Rust) and publishes the Windows
+# installer. Runs on demand, on version tags, and on pushes that touch desktop/.
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+    branches: [master]
+    paths: ["desktop/**", ".github/workflows/desktop-installer.yml"]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build Tauri app (exe + NSIS installer)
+        run: npm run tauri build
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ac-defender-desktop-windows
+          path: |
+            desktop/src-tauri/target/release/bundle/nsis/*.exe
+            desktop/src-tauri/target/release/ac-defender-desktop.exe
+          if-no-files-found: error
+
+      # On a version tag, attach the installer to a GitHub release.
+      - name: Release installer
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: desktop/src-tauri/target/release/bundle/nsis/*.exe
+          generate_release_notes: true
+
+  # Keep the defender itself honest on every push too.
+  defender-tests:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Build
+        run: dotnet build HomeAssistantAcDefender.csproj
+      - name: Regression suite
+        run: dotnet run --project HomeAssistantAcDefender.Tests/HomeAssistantAcDefender.Tests.csproj

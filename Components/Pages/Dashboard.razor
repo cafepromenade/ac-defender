@@ -1,0 +1,681 @@
+@page "/"
+@implements IDisposable
+@inject DefenderStateProvider State
+@inject DefenderStateStore StateStore
+@inject AcDefenderService Defender
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+
+<PageTitle>Command Center - AC Defender</PageTitle>
+
+<div class="ops-dash-stack">
+
+    @* ---------- alert rows ---------- *@
+    @if (Snapshot?.FrontDoorKillSwitch.Active == true || Snapshot?.FrontDoorKillSwitch.PersonDetected == true)
+    {
+        <div class="ops-alert-row ops-alert-row--bad">
+            <span class="ops-alert-row__glyph" aria-hidden="true">⛔</span>
+            <span class="ops-alert-row__tag">DOOR TRIP</span>
+            <span class="ops-alert-row__text">@Snapshot.FrontDoorKillSwitch.Status</span>
+        </div>
+    }
+    @if (Snapshot?.Emergency.Active == true)
+    {
+        <div class="ops-alert-row ops-alert-row--warn">
+            <span class="ops-alert-row__glyph" aria-hidden="true">‼</span>
+            <span class="ops-alert-row__tag">EMERGENCY</span>
+            <span class="ops-alert-row__text">@Snapshot.Emergency.Status</span>
+        </div>
+    }
+    @if (Snapshot?.WebsiteCommandDebounce.Active == true)
+    {
+        <div class="ops-alert-row ops-alert-row--warn">
+            <span class="ops-alert-row__glyph" aria-hidden="true">◔</span>
+            <span class="ops-alert-row__tag">DEBOUNCE</span>
+            <span class="ops-alert-row__text">@Snapshot.WebsiteCommandDebounce.Status</span>
+        </div>
+    }
+    <div class="ops-alert-row">
+        <span class="ops-alert-row__glyph" aria-hidden="true">@NextActionGlyph</span>
+        <span class="ops-alert-row__tag">@NextActionTag</span>
+        <span class="ops-alert-row__text">@NextActionText</span>
+    </div>
+
+    <div class="ops-dash-grid">
+
+        @* ── TACTICAL FLOOR ── *@
+        <div class="ops-floor">
+            <div class="ops-floor__head">
+                <span class="ops-floor__title">DEFENSE FLOOR — LIVE</span>
+                <span class="ops-floor__rec-dot" aria-hidden="true"></span>
+                <span class="ops-floor__rec">REC</span>
+                <span class="ops-floor__spacer"></span>
+                <span class="ops-floor__status">@FloorStatus</span>
+            </div>
+
+            <div class="ops-floor__map" @onclick="CloseThermostat">
+                <div class="ops-floor__radar" aria-hidden="true"><div class="ops-floor__radar-cone"></div></div>
+                <div class="ops-floor__scanline" aria-hidden="true"></div>
+
+                <div class="ops-room" style="left: 6%; top: 8%; width: 42%; height: 40%;"><span class="ops-room__label">DINING ROOM</span></div>
+                <div class="ops-room" style="left: 54%; top: 8%; width: 40%; height: 26%;"><span class="ops-room__label">KITCHEN</span></div>
+                <div class="ops-room" style="left: 54%; top: 40%; width: 40%; height: 32%;"><span class="ops-room__label">LIVING ROOM</span></div>
+                <div class="ops-room" style="left: 6%; top: 54%; width: 42%; height: 34%;"><span class="ops-room__label">HALLWAY · FRONT DOOR</span></div>
+
+                @* patrol routes *@
+                <div class="ops-floor__route-h" style="left: 14%; top: 36%; width: 34%;" aria-hidden="true"></div>
+                <div class="ops-floor__route-v" style="left: 62%; top: 30%; height: 38%;" aria-hidden="true"></div>
+
+                @* thermostat node *@
+                <div class="ops-thermo-node" @onclick:stopPropagation="true">
+                    <div class="@ThermoDiscClass" @onclick="ToggleThermostatPop" role="button" tabindex="0" aria-label="Open unit control">
+                        <span class="ops-thermo-node__value">@SetpointShort</span>
+                        <span class="ops-thermo-node__ping" aria-hidden="true"></span>
+                        <span class="ops-thermo-node__ping ops-thermo-node__ping--late" aria-hidden="true"></span>
+                    </div>
+                    <div class="ops-thermo-node__tag">THERMOSTAT · TAP</div>
+
+                    @if (_thermoOpen)
+                    {
+                        <div class="ops-thermo-pop">
+                            <div class="ops-thermo-pop__head">
+                                <span class="ops-thermo-pop__title">UNIT CONTROL</span>
+                                <button class="ops-thermo-pop__close" @onclick="CloseThermostat" aria-label="Close unit control">✕</button>
+                            </div>
+                            <div class="ops-thermo-pop__row">
+                                <button class="ops-step-btn" @onclick="TargetDown" aria-label="Lower target">−</button>
+                                <div>
+                                    <div class="ops-thermo-pop__value">@TargetText</div>
+                                    <div class="ops-thermo-pop__value-label">TEMP I WANT</div>
+                                </div>
+                                <button class="ops-step-btn" @onclick="TargetUp" aria-label="Raise target">+</button>
+                            </div>
+                            <div class="ops-thermo-pop__actions">
+                                <button class="ops-mode-btn active" @onclick="ForceBoost">❆ COOL</button>
+                                <button class="ops-mode-btn" @onclick="ForceTarget">⌖ TARGET</button>
+                                <button class="ops-mode-btn" @onclick="RefreshReal">⟳ REFRESH</button>
+                                <button class="ops-mode-btn" @onclick="TurnOff">⏻ OFF</button>
+                            </div>
+                            <div class="@ThermoNoteClass">@ThermoNote</div>
+                        </div>
+                    }
+                </div>
+
+                @* cold air particles while actively cooling *@
+                @if (CoolingActive)
+                {
+                    <span class="ops-flake" style="left: 24%; top: 32%; font-size: 11px; animation-duration: 5s;" aria-hidden="true">❆</span>
+                    <span class="ops-flake" style="left: 29%; top: 30%; font-size: 9px; animation-duration: 6.5s; animation-delay: 1.2s;" aria-hidden="true">❆</span>
+                    <span class="ops-flake" style="left: 21%; top: 34%; font-size: 8px; animation-duration: 7.5s; animation-delay: 2.6s;" aria-hidden="true">❆</span>
+                    <span class="ops-flake" style="left: 33%; top: 33%; font-size: 10px; animation-duration: 5.8s; animation-delay: 3.4s;" aria-hidden="true">❆</span>
+                    <span class="ops-flake" style="left: 26%; top: 28%; font-size: 8.5px; animation-duration: 8.2s; animation-delay: 0.6s;" aria-hidden="true">❆</span>
+                }
+
+                @* front door sensor *@
+                <div class="@DoorClass">
+                    <span class="ops-door__diamond" aria-hidden="true"></span>
+                    <span class="ops-door__label">DOOR SENSOR</span>
+                </div>
+
+                @* wall-touch blip *@
+                @if (ShowIntruder)
+                {
+                    <div class="ops-intruder">
+                        <div class="ops-intruder__blip" aria-hidden="true"><span class="ops-intruder__blip-ping"></span></div>
+                        <div class="ops-intruder__label">@IntruderLabel</div>
+                    </div>
+                }
+
+                @* defender agents *@
+                @foreach (var agent in Agents)
+                {
+                    <div class="@agent.Css" style="left: @agent.X; top: @agent.Y;">
+                        <div class="ops-agent__inner">
+                            <div class="ops-agent__disc">
+                                @agent.Initials
+                                @if (agent.Engaged)
+                                {
+                                    <span class="ops-agent__ring" aria-hidden="true"></span>
+                                }
+                            </div>
+                            <div class="ops-agent__name">@agent.Name</div>
+                            <div class="ops-agent__state">@agent.State</div>
+                        </div>
+                    </div>
+                }
+
+                <span class="ops-floor__corner ops-floor__corner--tl" aria-hidden="true"></span>
+                <span class="ops-floor__corner ops-floor__corner--tr" aria-hidden="true"></span>
+                <span class="ops-floor__corner ops-floor__corner--bl" aria-hidden="true"></span>
+                <span class="ops-floor__corner ops-floor__corner--br" aria-hidden="true"></span>
+            </div>
+
+            <div class="ops-ticker">
+                <span class="ops-ticker__tag">FEED</span>
+                <div class="ops-ticker__viewport">
+                    <div class="ops-ticker__scroll">@TickerText@TickerText</div>
+                </div>
+            </div>
+        </div>
+
+        @* ── RIGHT COLUMN ── *@
+        <div class="ops-dash-col">
+
+            @* wall thermostat *@
+            <div class="ops-panel ops-panel--pad">
+                <div class="ops-dial-head">
+                    <span class="ops-panel__label">WALL THERMOSTAT — LIVE UNIT</span>
+                    <span class="@DialStateClass">@DialStateText</span>
+                </div>
+                <div class="ops-dial-wrap">
+                    <div class="ops-dial" style="background: @DialBackground;">
+                        <div class="ops-dial__center">
+                            <div>
+                                <div class="ops-dial__value">@SetpointText</div>
+                                <div class="ops-dial__mode">SETPOINT · @HvacModeText</div>
+                                <div class="ops-dial__room">ROOM @RoomText</div>
+                            </div>
+                        </div>
+                        <div class="ops-dial__knob" style="left: @KnobX; top: @KnobY;" aria-hidden="true"></div>
+                    </div>
+                </div>
+                <div class="ops-dial-scale"><span>16°</span><span>LIVE WALL UNIT</span><span>30°</span></div>
+                <div class="ops-dial-controls__label">TEMP I WANT</div>
+                <div class="ops-dial-controls">
+                    <input type="number" min="10" max="35" step="0.5" value="@TargetInputText"
+                           @onchange="OnTargetInputChanged" aria-label="The temp I want" />
+                    <button class="ops-btn ops-btn--outline" @onclick="ForceTarget">⌖ SEND</button>
+                    <button class="ops-btn ops-btn--danger" @onclick="TurnOff">⏻ OFF</button>
+                </div>
+                <div class="@ThermoNoteClass" style="margin-top: 10px;">@ThermoNote</div>
+            </div>
+
+            @* the temp I want *@
+            <div class="ops-panel ops-panel--pad ops-want-panel">
+                <div class="ops-panel__label">⌖ TEMP I WANT — MY NUMBER</div>
+                <div class="ops-target__row">
+                    <div class="ops-target__value">@TargetShort</div>
+                    <div class="ops-target__steppers">
+                        <button @onclick="TargetUp" aria-label="Raise the temp I want">▲</button>
+                        <button @onclick="TargetDown" aria-label="Lower the temp I want">▼</button>
+                    </div>
+                </div>
+                <div class="ops-target__help">Yours until you change it — the defenders hold this number for the dining room and never touch it themselves. APPLY sends it to the wall unit right now.</div>
+                <div class="ops-target__actions">
+                    <button class="ops-btn ops-btn--solid" @onclick="ApplyTarget">APPLY MY TEMP</button>
+                    <button class="ops-btn ops-btn--outline" @onclick="GenerateTarget">✦ GENERATE</button>
+                </div>
+            </div>
+
+            @* live telemetry *@
+            <div class="ops-panel ops-panel--pad">
+                <div class="ops-panel__label">LIVE TELEMETRY</div>
+                <div class="ops-telemetry">
+                    @foreach (var row in Telemetry)
+                    {
+                        <div>
+                            <div class="ops-telemetry__row-top">
+                                <span class="ops-telemetry__label">@row.Label</span>
+                                <span class="ops-telemetry__value @row.ValueCss">@row.Value</span>
+                            </div>
+                            <div class="ops-bar"><div class="ops-bar__fill @row.BarCss" style="width: @row.Bar;"></div></div>
+                        </div>
+                    }
+                </div>
+            </div>
+
+            @* AC runtime *@
+            <div class="ops-panel ops-panel--pad">
+                <div class="ops-panel__label">AC RUNTIME — HOURS COOLING</div>
+                <div class="ops-runtime">
+                    <div class="ops-runtime__stat">
+                        <div class="ops-runtime__value">@RuntimeText(Snapshot?.AcRuntime?.TodayHours)</div>
+                        @if (Snapshot?.AcRuntime?.EstimatedCostEnabled == true)
+                        {
+                            <div class="ops-runtime__cost">@CostText(Snapshot?.AcRuntime?.EstimatedCostTodayDollars)</div>
+                        }
+                        <div class="ops-runtime__label">TODAY</div>
+                    </div>
+                    <div class="ops-runtime__stat">
+                        <div class="ops-runtime__value">@RuntimeText(Snapshot?.AcRuntime?.MonthHours)</div>
+                        @if (Snapshot?.AcRuntime?.EstimatedCostEnabled == true)
+                        {
+                            <div class="ops-runtime__cost">@CostText(Snapshot?.AcRuntime?.EstimatedCostMonthDollars)</div>
+                        }
+                        <div class="ops-runtime__label">THIS MONTH</div>
+                    </div>
+                    <div class="ops-runtime__stat">
+                        <div class="ops-runtime__value">@RuntimeText(Snapshot?.AcRuntime?.LifetimeHours)</div>
+                        @if (Snapshot?.AcRuntime?.EstimatedCostEnabled == true)
+                        {
+                            <div class="ops-runtime__cost">@CostText(Snapshot?.AcRuntime?.EstimatedCostLifetimeDollars)</div>
+                        }
+                        <div class="ops-runtime__label">LIFETIME</div>
+                    </div>
+                </div>
+                <div class="helper-text" style="margin-top: 8px;">Real compressor time (hvac_action = cooling)@(Snapshot?.AcRuntime?.TrackingSince is { } since ? $", counted since {Format.ToToronto(since):yyyy-MM-dd}" : "").@(Snapshot?.AcRuntime?.EstimatedCostEnabled == true ? $" Cost estimated at {Snapshot?.AcRuntime?.AssumedKilowatts:0.0} kW assumed AC load × the Alectra time-of-use rate at each moment — no Alectra sensor needed." : "")</div>
+            </div>
+
+            @* direct orders *@
+            <div class="ops-panel ops-panel--pad">
+                <div class="ops-panel__label">DIRECT ORDERS</div>
+                <div class="ops-orders">
+                    <button class="ops-order-btn" @onclick="RefreshReal">
+                        <span aria-hidden="true">⟳</span>
+                        <span class="ops-order-btn__label">REFRESH READING</span>
+                        <span class="ops-order-btn__hint">ask HA again</span>
+                    </button>
+                    <button class="ops-order-btn" @onclick="ForceTarget">
+                        <span aria-hidden="true">⌖</span>
+                        <span class="ops-order-btn__label">STEP TOWARD MY TEMP</span>
+                        <span class="ops-order-btn__hint">0.5° at a time → @TargetText</span>
+                    </button>
+                    <button class="ops-order-btn ops-order-btn--solid" @onclick="ForceBoost">
+                        <span aria-hidden="true">❆</span>
+                        <span class="ops-order-btn__label">FORCE COOLING</span>
+                        <span class="ops-order-btn__hint">no waiting</span>
+                    </button>
+                    <a class="ops-order-btn" href="/controls">
+                        <span aria-hidden="true">⌘</span>
+                        <span class="ops-order-btn__label">ALL CONTROLS</span>
+                        <span class="ops-order-btn__hint">STN-06 →</span>
+                    </a>
+                    <div style="margin-top: 4px;">
+                        <div class="ops-panel__label" style="color: var(--bad); margin-bottom: 5px;">🚨 BROTHER MAD — apologize + stand down 2h</div>
+                        <SlideToConfirm Label="SLIDE TO APOLOGIZE" ConfirmedLabel="APOLOGY SENT 🙇" Glyph="🚨" OnConfirmed="BrotherMad" />
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* very apologetic overlay *@
+@if (_apologyVisible)
+{
+    <div class="ops-apology" @onclick="() => _apologyVisible = false">
+        <div class="ops-apology__box">
+            <div class="ops-apology__bow" aria-hidden="true">❆</div>
+            <div class="ops-apology__title">WE ARE SO, SO SORRY</div>
+            <div class="ops-apology__line">The defenders are bowing as deeply as tiny snowflakes can bow.</div>
+            <div class="ops-apology__line">@(_apologyAuto ? "The upset was detected automatically — nobody needed to press anything." : "The AC has been eased up ") @(_apologyAuto ? "" : "+1.0 °C immediately as a peace gesture.")</div>
+            <div class="ops-apology__line">All corrections are <strong>stopped for 2 hours</strong>. The thermostat is yours.</div>
+            <div class="ops-apology__line ops-apology__line--small">The anger model has recorded this hour as sensitive — the defenders will be more hands-off at this time from now on. Please forgive us. 🙇</div>
+        </div>
+    </div>
+}
+
+@code {
+    private double _targetInput = 22.0;
+    private bool _targetDirty;
+    private bool _thermoOpen;
+
+    private DefenderSnapshot? Snapshot => State.Snapshot;
+
+    private bool DefenderIsEnabled => Snapshot?.DefenderEnabled == true;
+    private bool IsAlert => Snapshot?.CoolingFailure.Alerting == true || Snapshot?.CoolingFailure.OmegaAlerting == true
+        || Snapshot?.FrontDoorKillSwitch.Active == true || Snapshot?.FrontDoorKillSwitch.PersonDetected == true;
+
+    private int BusyGuardCount => Snapshot is null ? 0 : GuardCatalog.Live.Count(g => g.Project!(Snapshot).Busy);
+    private bool Engaged => DefenderIsEnabled && (BusyGuardCount > 0 || IsAlert);
+
+    // ---------- alert / next-action row ----------
+
+    private string NextActionGlyph => !DefenderIsEnabled ? "☾" : BusyGuardCount > 0 ? "◔" : "✓";
+    private string NextActionTag => !DefenderIsEnabled ? "STAND-DOWN" : BusyGuardCount > 0 ? "NEXT MOVE" : "ALL QUIET";
+    private string NextActionText => Snapshot?.NextAction ?? "Waiting for defender status.";
+
+    private static string RuntimeText(double? hours) => hours is { } h
+        ? h >= 10 ? $"{h:0}h" : $"{(int)h}h {(int)Math.Round(h % 1 * 60)}m"
+        : "--";
+
+    // Estimated AC-only cost under each runtime stat (assumed load × TOU rate; see helper text).
+    private static string CostText(double? dollars) => dollars is { } d ? $"≈ ${d:0.00}" : "--";
+
+    // ---------- floor ----------
+
+    private string FloorStatus => $"{Agents.Count(a => a.Engaged)} ENGAGED · {(DefenderIsEnabled ? 4 : 0)} ON DUTY";
+    private bool CoolingActive => DefenderIsEnabled && string.Equals(Snapshot?.HomeAssistantThermostat?.HvacAction, "cooling", StringComparison.OrdinalIgnoreCase);
+    private bool ShowIntruder => Engaged && BusyGuardCount > 0;
+    private string IntruderLabel => IsAlert ? "HOSTILE · WALL TOUCH" : "WALL TOUCH";
+    private string DoorClass => Snapshot?.FrontDoorKillSwitch.Active == true || Snapshot?.FrontDoorKillSwitch.PersonDetected == true
+        ? "ops-door ops-door--tripped"
+        : "ops-door";
+
+    private sealed record FloorAgent(string Name, string Initials, string X, string Y, string Route, string State, bool Engaged)
+    {
+        public string Css => $"ops-agent ops-agent--{Route}{(Engaged ? " ops-agent--engaged" : "")}";
+    }
+
+    private IReadOnlyList<FloorAgent> Agents
+    {
+        get
+        {
+            var alert = IsAlert;
+            var standby = !DefenderIsEnabled;
+            var engagedCount = Math.Min(BusyGuardCount, 4);
+
+            return
+            [
+                MakeAgent("SGT FROST", "F", "20%", "44%", "a", 0),
+                MakeAgent("CPL BREEZE", "B", "68%", "20%", "b", 1),
+                MakeAgent("PVT CHILL", "C", "72%", "56%", "c", 2),
+                MakeAgent("LT GLACIER", "G", "30%", "74%", "d", 3),
+            ];
+
+            FloorAgent MakeAgent(string name, string initials, string x, string y, string route, int index)
+            {
+                var engaged = !standby && (index < engagedCount || (alert && index < 2));
+                var state = standby ? "OFF DUTY"
+                    : alert ? (engaged ? "ENGAGING" : "COVERING")
+                    : engaged ? "CORRECTING"
+                    : "PATROLLING";
+                return new FloorAgent(name, initials, x, y, route, state, engaged);
+            }
+        }
+    }
+
+    // ---------- ticker ----------
+
+    private string TickerText
+    {
+        get
+        {
+            var bits = new List<string>();
+            if (!DefenderIsEnabled)
+            {
+                bits.Add("DEFENDER OFFLINE");
+                bits.Add("SNACK INVENTORY: ADEQUATE");
+                bits.Add("WAKE THE CREW WHEN READY");
+            }
+            else
+            {
+                if (Snapshot?.HomeAssistantThermostat is { } t)
+                {
+                    bits.Add($"ROOM {t.CurrentTemperatureCelsius:0.0}°C · SETPOINT {t.SetPointCelsius:0.0}°C · {t.HvacAction?.ToUpperInvariant()}");
+                }
+                if (Snapshot?.Weather?.OutdoorTemperatureCelsius is { } o)
+                {
+                    bits.Add($"OUTDOOR {o:0.0}°C {Snapshot.Weather.Condition?.ToUpperInvariant()}");
+                }
+                if (!string.IsNullOrWhiteSpace(Snapshot?.PeakPowerSaver.TouPeriod))
+                {
+                    bits.Add($"ALECTRA {Snapshot.PeakPowerSaver.TouPeriod.ToUpperInvariant()}");
+                }
+                foreach (var e in (Snapshot?.Events ?? Array.Empty<DefenderEvent>()).Take(4))
+                {
+                    bits.Add($"{Format.ShortTime(e.Timestamp)} {e.Message.ToUpperInvariant()}");
+                }
+                if (bits.Count == 0)
+                {
+                    bits.Add("ALL SECTORS NOMINAL");
+                }
+            }
+
+            return " /// " + string.Join(" /// ", bits) + " /// ";
+        }
+    }
+
+    // ---------- thermostat / dial ----------
+
+    private double Setpoint => Snapshot?.HomeAssistantThermostat?.SetPointCelsius ?? Target;
+    private double Target => Snapshot?.TargetTemperatureCelsius ?? 22.0;
+
+    private string SetpointShort => $"{Setpoint:0.0}°";
+    private string SetpointText => $"{Setpoint:0.0}°C";
+    private string TargetText => $"{Target:0.0}°C";
+    private string TargetShort => $"{Target:0.0}°";
+    private string TargetInputText => _targetInput.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture);
+    private string RoomText => Snapshot?.HomeAssistantThermostat is { } t ? $"{t.CurrentTemperatureCelsius:0.0}°C" : "--";
+    private string HvacModeText => (Snapshot?.HomeAssistantThermostat?.HvacMode ?? "--").ToUpperInvariant();
+
+    private bool Drifted => Snapshot?.HomeAssistantThermostat is { } t
+        && (Math.Abs(t.SetPointCelsius - Target) > 0.05 || !string.Equals(t.HvacMode, "cool", StringComparison.OrdinalIgnoreCase));
+
+    private string ThermoDiscClass => Drifted ? "ops-thermo-node__disc ops-thermo-node__disc--drift" : "ops-thermo-node__disc";
+
+    private string ThermoNote => !DefenderIsEnabled
+        ? "Defender offline — nobody is watching this unit. Change anything, coward."
+        : Drifted
+            ? $"⚠ Drift from target detected. The guards noticed. A quiet correction back to {Target:0.0}°C cool is being scheduled."
+            : "Holding at target. The defenders approve of this configuration.";
+
+    private string ThermoNoteClass => Drifted && DefenderIsEnabled ? "ops-thermo-note ops-thermo-note--drift" : "ops-thermo-note";
+
+    private string DialStateText => !DefenderIsEnabled ? "UNGUARDED" : Drifted ? "DRIFT DETECTED" : "HOLDING";
+    private string DialStateClass => !DefenderIsEnabled
+        ? "ops-dial-state ops-dial-state--off"
+        : Drifted ? "ops-dial-state ops-dial-state--drift" : "ops-dial-state ops-dial-state--holding";
+
+    private double SetpointAngle => Math.Clamp((Setpoint - 16.0) / 14.0, 0, 1) * 270.0;
+
+    private string DialBackground =>
+        $"conic-gradient(from 135deg, var(--accent) 0deg {SetpointAngle.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)}deg, var(--line) {SetpointAngle.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)}deg 270deg, transparent 270deg 360deg)";
+
+    private string KnobX => $"{(96 + 82 * Math.Sin((135 + SetpointAngle) * Math.PI / 180)).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)}px";
+    private string KnobY => $"{(96 - 82 * Math.Cos((135 + SetpointAngle) * Math.PI / 180)).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)}px";
+
+    private void ToggleThermostatPop() => _thermoOpen = !_thermoOpen;
+    private void CloseThermostat() => _thermoOpen = false;
+
+    // ---------- telemetry ----------
+
+    private sealed record TelemetryRow(string Label, string Value, string Bar, string BarCss, string ValueCss);
+
+    private IReadOnlyList<TelemetryRow> Telemetry
+    {
+        get
+        {
+            if (!DefenderIsEnabled)
+            {
+                return [new TelemetryRow("DEFENDER", "OFFLINE", "0%", "ops-bar__fill--sub", "")];
+            }
+
+            var t = Snapshot?.HomeAssistantThermostat;
+            var rows = new List<TelemetryRow>();
+
+            if (t is not null)
+            {
+                rows.Add(new TelemetryRow("ROOM TEMP", $"{t.CurrentTemperatureCelsius:0.0}°C",
+                    Pct(t.CurrentTemperatureCelsius, 16, 32), IsAlert ? "ops-bar__fill--bad" : "", ""));
+                rows.Add(new TelemetryRow("SETPOINT", $"{t.SetPointCelsius:0.0}°C",
+                    Pct(t.SetPointCelsius, 16, 30), "", "ops-telemetry__value--accent"));
+            }
+
+            if (Snapshot?.Weather?.OutdoorTemperatureCelsius is { } o)
+            {
+                rows.Add(new TelemetryRow("OUTDOOR", $"{o:0.0}°C", Pct(o, 0, 40), "ops-bar__fill--warn", ""));
+            }
+
+            if (Snapshot?.Comfort.HottestUpstairsTemperatureCelsius is { } up)
+            {
+                rows.Add(new TelemetryRow("UPSTAIRS MAX", $"{up:0.0}°C", Pct(up, 16, 32), "ops-bar__fill--warn", ""));
+            }
+
+            var action = t?.HvacAction ?? "--";
+            var cooling = string.Equals(action, "cooling", StringComparison.OrdinalIgnoreCase);
+            rows.Add(new TelemetryRow("HVAC ACTION",
+                IsAlert && !cooling ? $"{action.ToUpperInvariant()} ⚠" : action.ToUpperInvariant(),
+                IsAlert && !cooling ? "4%" : cooling ? "70%" : "10%",
+                IsAlert && !cooling ? "ops-bar__fill--bad" : cooling ? "ops-bar__fill--good" : "ops-bar__fill--warn",
+                IsAlert && !cooling ? "ops-telemetry__value--bad" : cooling ? "ops-telemetry__value--good" : "ops-telemetry__value--warn"));
+
+            if (Snapshot?.CooldownSeconds > 0)
+            {
+                rows.Add(new TelemetryRow("COOLDOWN", $"{Snapshot.CooldownSeconds}s", Pct(Snapshot.CooldownSeconds, 0, 600), "ops-bar__fill--sub", ""));
+            }
+
+            return rows;
+
+            static string Pct(double value, double min, double max) =>
+                $"{Math.Clamp((value - min) / (max - min) * 100, 2, 100).ToString("0", System.Globalization.CultureInfo.InvariantCulture)}%";
+        }
+    }
+
+    // ---------- commands (same plumbing as before the redesign) ----------
+
+    private void OnTargetInputChanged(ChangeEventArgs e)
+    {
+        if (double.TryParse(e.Value?.ToString(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var v))
+        {
+            _targetInput = Math.Clamp(v, 10, 35);
+            _targetDirty = true;
+            SaveTarget(_targetInput);
+        }
+    }
+
+    private void TargetUp() => SaveTarget(Target + 0.5);
+    private void TargetDown() => SaveTarget(Target - 0.5);
+
+    private void SaveTarget(double value)
+    {
+        if (!TryBeginWebsiteCommand("set target", bypassDebounce: true))
+        {
+            return;
+        }
+
+        var snapshot = StateStore.SetTarget(Math.Clamp(value, 10, 35));
+        State.Refresh();
+        _targetInput = snapshot.TargetTemperatureCelsius;
+        _targetDirty = false;
+    }
+
+    private void GenerateTarget()
+    {
+        if (!TryBeginWebsiteCommand("generate target", bypassDebounce: true))
+        {
+            return;
+        }
+
+        var snapshot = StateStore.GenerateTarget();
+        State.Refresh();
+        _targetInput = snapshot.TargetTemperatureCelsius;
+        _targetDirty = false;
+        Snackbar.Add("Generated a new target.", Severity.Success);
+    }
+
+    private async Task ApplyTarget()
+    {
+        if (!TryBeginWebsiteCommand("set target", bypassDebounce: true))
+        {
+            return;
+        }
+
+        var snapshot = StateStore.SetTarget(_targetDirty ? _targetInput : Target);
+        State.Refresh();
+        _targetInput = snapshot.TargetTemperatureCelsius;
+        _targetDirty = false;
+        await RunThermostatAction(() => Defender.ForceTargetAsync(CancellationToken.None), "Target applied to the wall unit.", "force exact target");
+    }
+
+    private bool _apologyVisible;
+    private bool _apologyAuto;
+    private DateTimeOffset? _lastAutoApologyUntil;
+
+    private async Task BrotherMad()
+    {
+        _apologyVisible = true;
+        _apologyAuto = false;
+        StateHasChanged();
+        await RunThermostatAction(
+            () => Defender.ApplyEmergencyProtocolAsync("brother-mad", CancellationToken.None),
+            "Apology sent. Standing down for 2 hours.",
+            "emergency brother-mad",
+            bypassDebounce: true);
+        _ = HideApologyAfterDelayAsync();
+    }
+
+    private async Task HideApologyAfterDelayAsync()
+    {
+        await Task.Delay(9000);
+        _apologyVisible = false;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private Task RefreshReal() => RunThermostatAction(() => Defender.RefreshRealThermostatAsync(CancellationToken.None), "Thermostat refreshed.", "refresh thermostat", bypassDebounce: true);
+    private Task ForceTarget() => RunThermostatAction(() => Defender.ForceTargetAsync(CancellationToken.None), "Exact target sent.", "force exact target");
+    private Task ForceBoost() => RunThermostatAction(() => Defender.ForceCoolingBoostAsync(CancellationToken.None), "Cooling boost sent.", "force cooling");
+
+    private async Task TurnOff()
+    {
+        var confirm = await DialogService.ShowMessageBoxAsync(
+            "Turn off the real thermostat?",
+            "This sends a real Home Assistant command to turn the dining-room thermostat off.",
+            yesText: "Turn thermostat off",
+            cancelText: "Cancel");
+
+        if (confirm == true)
+        {
+            await RunThermostatAction(() => Defender.TurnThermostatOffAsync(CancellationToken.None), "Thermostat turned off.", "turn thermostat off");
+        }
+    }
+
+    private bool TryBeginWebsiteCommand(string actionName, bool bypassDebounce = false)
+    {
+        var gate = StateStore.TryBeginWebsiteCommand(actionName, bypassDebounce);
+        State.Refresh();
+        if (gate.Accepted)
+        {
+            return true;
+        }
+
+        Snackbar.Add(gate.Message, Severity.Warning);
+        return false;
+    }
+
+    private async Task RunThermostatAction(Func<Task> action, string successMessage, string actionName, bool bypassDebounce = false)
+    {
+        if (!TryBeginWebsiteCommand(actionName, bypassDebounce))
+        {
+            return;
+        }
+
+        try
+        {
+            await action();
+            State.Refresh();
+            if (!_targetDirty)
+            {
+                _targetInput = Snapshot?.TargetTemperatureCelsius ?? _targetInput;
+            }
+
+            Snackbar.Add(successMessage, Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            StateStore.RecordHomeAssistantUnavailable($"Home Assistant error: {ex.Message}");
+            State.Refresh();
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    protected override void OnInitialized()
+    {
+        _targetInput = Snapshot?.TargetTemperatureCelsius ?? 22.0;
+        State.Changed += OnStateChanged;
+    }
+
+    private void OnStateChanged()
+    {
+        if (!_targetDirty && Snapshot is not null)
+        {
+            _targetInput = Snapshot.TargetTemperatureCelsius;
+        }
+
+        // The rage detector fired: show the apologetic overlay without anyone pressing anything.
+        if (Snapshot?.Emergency is { Active: true } emergency
+            && emergency.Protocol.Contains("auto", StringComparison.OrdinalIgnoreCase)
+            && emergency.Until is { } until
+            && until != _lastAutoApologyUntil)
+        {
+            _lastAutoApologyUntil = until;
+            _apologyVisible = true;
+            _apologyAuto = true;
+            _ = HideApologyAfterDelayAsync();
+        }
+
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose() => State.Changed -= OnStateChanged;
+}

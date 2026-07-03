@@ -1,0 +1,1782 @@
+@page "/settings"
+@inject DefenderStateStore StateStore
+@inject ISnackbar Snackbar
+@inject TwoFactorAuth TwoFactorAuth
+@inject HomeAssistantTokenStore TokenStore
+@inject Microsoft.Extensions.Options.IOptionsMonitor<HomeAssistantAcDefender.Options.HomeAssistantOptions> HaOptions
+
+<PageTitle>Settings - AC Defender</PageTitle>
+
+<MudStack Spacing="3" Class="settings-shell">
+    <SectionCard Title="Settings"
+                 Subtitle="Tune the defender"
+                 Help="Adjust timing, comfort, and safety. Type to filter controls. Changes apply when you save.">
+        <Actions>
+            <MudChip T="string" Size="Size.Small" Color="@(_dirty ? Color.Warning : Color.Default)" Variant="Variant.Outlined">@StatusText</MudChip>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveSettings" StartIcon="@Icons.Material.Filled.Save">Save</MudButton>
+        </Actions>
+        <ChildContent>
+            <MudTextField @bind-Value="_settingsSearch" Immediate="true" Clearable="true" Margin="Margin.Dense"
+                          Placeholder="Search settings (cooldown, walkback, upstairs, weather…)"
+                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Variant="Variant.Outlined" Class="mt-1" />
+        </ChildContent>
+    </SectionCard>
+
+    @* ───────────── Home Assistant connection ───────────── *@
+    <SectionCard Title="Home Assistant connection"
+                 Subtitle="@HaTokenSubtitle"
+                 Help="The defender needs a long-lived Home Assistant access token. Normally it comes from the server environment (.env). If none is configured there, you can paste one here — it is stored on the server, never shown again, and the environment token always wins when both exist.">
+        <MudGrid Spacing="2">
+            <MudItem xs="12">
+                @if (HaEnvTokenConfigured)
+                {
+                    <MudAlert Severity="Severity.Success" Variant="Variant.Outlined" Dense="true">Token is configured in the server environment — nothing to do here.</MudAlert>
+                }
+                else if (TokenStore.HasToken)
+                {
+                    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">A website-entered token is saved and in use. Paste a new one to replace it, or clear it below.</MudAlert>
+                }
+                else
+                {
+                    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true">No Home Assistant token found — the defender cannot reach the thermostat. Paste a long-lived access token below (Home Assistant → your profile → Security → Long-lived access tokens).</MudAlert>
+                }
+            </MudItem>
+            <MudItem xs="12" md="8">
+                <MudTextField @bind-Value="_haTokenInput" Label="Long-lived access token" InputType="InputType.Password"
+                              Variant="Variant.Outlined" Margin="Margin.Dense" HelperText="Optional — only used when the environment has no token." />
+            </MudItem>
+            <MudItem xs="12" md="4" Class="d-flex align-center gap-2">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveHaToken" StartIcon="@Icons.Material.Filled.Key">Save token</MudButton>
+                @if (TokenStore.HasToken)
+                {
+                    <MudButton Variant="Variant.Outlined" Color="Color.Error" OnClick="ClearHaToken">Clear</MudButton>
+                }
+            </MudItem>
+        </MudGrid>
+    </SectionCard>
+
+    @* ───────────── Accounts ───────────── *@
+    <SectionCard Title="Accounts" Help="Login is account-based: the first sign-up becomes the owner, and everyone else needs the registration code you set here.">
+        <MudGrid Spacing="2">
+            <MudItem xs="12">
+                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                    @TwoFactorAuth.AccountCount account(s)@(TwoFactorAuth.AccountCount > 0 ? $": {string.Join(", ", TwoFactorAuth.AccountUsernames)}" : "")
+                </MudAlert>
+            </MudItem>
+            <MudItem xs="12">
+                <MudAlert Severity="@(TwoFactorAuth.HasRegistrationCode ? Severity.Success : Severity.Warning)" Variant="Variant.Outlined" Dense="true">
+                    @(TwoFactorAuth.HasRegistrationCode
+                        ? "A registration code is set — share it with people you want to let sign up."
+                        : "No registration code set, so additional sign-ups are closed. Set one below to let others register.")
+                </MudAlert>
+            </MudItem>
+            <MudItem xs="12" sm="8">
+                <MudTextField @bind-Value="_registrationCode" Label="Registration code" Variant="Variant.Outlined"
+                              Margin="Margin.Dense" Immediate="true" Placeholder="A code you give to people you want to allow" />
+            </MudItem>
+            <MudItem xs="12" Class="d-flex flex-wrap gap-2">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveRegistrationCode" StartIcon="@Icons.Material.Filled.Key">Save registration code</MudButton>
+                @if (TwoFactorAuth.HasRegistrationCode)
+                {
+                    <MudButton Variant="Variant.Outlined" Color="Color.Error" OnClick="CloseSignups" StartIcon="@Icons.Material.Filled.Block">Close sign-ups</MudButton>
+                }
+            </MudItem>
+        </MudGrid>
+    </SectionCard>
+
+    @* ───────────── Automation ───────────── *@
+    <SectionCard Title="Automation" Help="Schedule, weather activation, cooldown, cool restore, conflict quiet, and weather drift.">
+        <MudExpansionPanels MultiExpansion="true" Class="setting-panels">
+            @if (Show("peace offering app phone concede up gift madness")) {
+                <MudExpansionPanel Text="Peace offering" Expanded="@IsSettingsSearchActive">
+                    <MudGrid Spacing="2">
+                        <SettingSwitch Label="Concede when the app raises the temp" Value="_peaceOfferingEnabled" ValueChanged="@(v => SetDirty(v, x => _peaceOfferingEnabled = x))" Help="When someone raises the setpoint from the phone/Home Assistant app, immediately go a little HIGHER than they asked and stand down for the hold window — they see the system agreeing, not fighting. A genuinely hot room cancels the hold." />
+                        <SettingDouble Label="Extra step up (C)" Value="_peaceOfferingStepCelsius" ValueChanged="@(v => SetDirty(v, x => _peaceOfferingStepCelsius = x))" Min="0.1" Max="2" Step="0.1" Help="How much above their number the gift goes." />
+                        <SettingInt Label="Stand-down after the gift (minutes)" Value="_peaceOfferingHoldMinutes" ValueChanged="@(v => SetDirty(v, x => _peaceOfferingHoldMinutes = x))" Min="1" Max="240" Help="How long the defender leaves their choice alone." />
+                    </MudGrid>
+                </MudExpansionPanel>
+            }
+            @if (Show("auto apology rage brother mad detector foolproof adhd")) {
+                <MudExpansionPanel Text="Auto apology (rage detector)" Expanded="@IsSettingsSearchActive">
+                    <MudGrid Spacing="2">
+                        <SettingSwitch Label="Detect upset automatically" Value="_autoBrotherMadEnabled" ValueChanged="@(v => SetDirty(v, x => _autoBrotherMadEnabled = x))" Help="Foolproof: a burst of thermostat touches or one big angry raise triggers the full brother-mad apology automatically — nobody has to remember a button." />
+                        <SettingInt Label="Touches to trigger" Value="_autoBrotherMadTouches" ValueChanged="@(v => SetDirty(v, x => _autoBrotherMadTouches = x))" Min="2" Max="20" Help="External thermostat changes within the window that count as rage." />
+                        <SettingInt Label="Window (minutes)" Value="_autoBrotherMadWindowMinutes" ValueChanged="@(v => SetDirty(v, x => _autoBrotherMadWindowMinutes = x))" Min="2" Max="120" Help="How close together the touches must be." />
+                        <SettingDouble Label="Big raise trigger (C)" Value="_autoBrotherMadBigRaiseCelsius" ValueChanged="@(v => SetDirty(v, x => _autoBrotherMadBigRaiseCelsius = x))" Min="0.5" Max="10" Step="0.5" Help="A single raise this large counts as rage on its own." />
+                    </MudGrid>
+                </MudExpansionPanel>
+            }
+            @if (Show("stand down park 28 off save power unguarded")) {
+                <MudExpansionPanel Text="Stand-down parking" Expanded="@IsSettingsSearchActive">
+                    <MudGrid Spacing="2">
+                        <SettingSwitch Label="Park the thermostat when the defender is turned off" Value="_standDownParkEnabled" ValueChanged="@(v => SetDirty(v, x => _standDownParkEnabled = x))" Help="Standing down raises the setpoint to the park value (cool mode, raise only) so the unguarded AC barely runs." />
+                        <SettingDouble Label="Park setpoint (C)" Value="_standDownParkSetPointCelsius" ValueChanged="@(v => SetDirty(v, x => _standDownParkSetPointCelsius = x))" Min="20" Max="30" Step="0.5" Help="Default 28." />
+                    </MudGrid>
+                </MudExpansionPanel>
+            }
+            @if (Show("gentle stepping pace walk step gap fight slow")) {
+                <MudExpansionPanel Text="Gentle stepping" Expanded="@IsSettingsSearchActive">
+                    <MudGrid Spacing="2">
+                        <SettingInt Label="Anti-flap: minimum seconds between steps" Value="_coolingStepMinimumGapSeconds" ValueChanged="@(v => SetDirty(v, x => _coolingStepMinimumGapSeconds = x))" Min="0" Max="3600" Help="Steps are driven by the room temperature actually dropping, never by a schedule. This spacing only prevents command bursts and compressor short-cycling." />
+                    </MudGrid>
+                </MudExpansionPanel>
+            }
+            @if (Show("on forever cooling rest run limit continuous breather 24 hours")) {
+                <MudExpansionPanel Text="On-forever protection" Expanded="@IsSettingsSearchActive">
+                    <MudGrid Spacing="2">
+                        <SettingSwitch Label="Rest after very long cooling runs" Value="_coolingRestEnabled" ValueChanged="@(v => SetDirty(v, x => _coolingRestEnabled = x))" Help="If the AC cools continuously past the run limit and the room still has not reached the target (an unreachable target), the defender eases the setpoint above the room and rests — it must never be on for 24 hours." />
+                        <SettingInt Label="Maximum continuous run (minutes)" Value="_coolingRunMaxMinutes" ValueChanged="@(v => SetDirty(v, x => _coolingRunMaxMinutes = x))" Min="30" Max="1440" Help="How long the AC may cool non-stop before a forced breather." />
+                        <SettingInt Label="Rest length (minutes)" Value="_coolingRestMinutes" ValueChanged="@(v => SetDirty(v, x => _coolingRestMinutes = x))" Min="5" Max="240" Help="How long the breather lasts before cooling may resume." />
+                    </MudGrid>
+                </MudExpansionPanel>
+            }
+            @if (Show("night shutdown off overnight sleep window outdoor cheap power")) {
+                <MudExpansionPanel Text="Night shutdown" Expanded="@IsSettingsSearchActive">
+                    <MudGrid Spacing="2">
+                        <SettingSwitch Label="Turn the AC off overnight" Value="_nightShutdownEnabled" ValueChanged="@(v => SetDirty(v, x => _nightShutdownEnabled = x))" Help="During the window below, if it is cool outside, the defender turns the AC off once and stands down completely. Turning it back on manually is respected." />
+                        <MudItem xs="6" sm="3">
+                            <MudTextField T="string" Value="_nightShutdownStartTime" ValueChanged="@(v => SetDirty(v, x => _nightShutdownStartTime = x))" Label="From (HH:mm)" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                        </MudItem>
+                        <MudItem xs="6" sm="3">
+                            <MudTextField T="string" Value="_nightShutdownEndTime" ValueChanged="@(v => SetDirty(v, x => _nightShutdownEndTime = x))" Label="Until (HH:mm)" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                        </MudItem>
+                        <SettingDouble Label="Only when outdoor below (C)" Value="_nightShutdownOutdoorBelowCelsius" ValueChanged="@(v => SetDirty(v, x => _nightShutdownOutdoorBelowCelsius = x))" Min="0" Max="40" Step="0.5" Help="Safety valve: on a hot night the AC keeps running. Unknown outdoor also keeps it running." />
+                        <SettingDouble Label="Night minimum setpoint (C)" Value="_nightMinimumSetPointCelsius" ValueChanged="@(v => SetDirty(v, x => _nightMinimumSetPointCelsius = x))" Min="0" Max="30" Step="0.5" Help="During the night window the defender never commands below this — even if the daytime target is lower. Set 0 to disable." />
+                        <SettingInt Label="Night cooling budget (minutes)" Value="_nightCoolingBudgetMinutes" ValueChanged="@(v => SetDirty(v, x => _nightCoolingBudgetMinutes = x))" Min="0" Max="420" Help="Even on a warm night, the AC may cool at most this long inside the window; then it eases to a stop and only observes — so it is never humming all night (a brother-mad trigger). Set 0 to disable." />
+                    </MudGrid>
+                </MudExpansionPanel>
+            }
+            @if (Show("website debounce buttons rest command spam")) {
+                <MudExpansionPanel Text="Website debounce" Expanded="@IsSettingsSearchActive">
+                    <MudGrid Spacing="2">
+                        <SettingSwitch Label="Website command debounce" Value="_websiteCommandDebounceEnabled" ValueChanged="@(v => SetDirty(v, x => _websiteCommandDebounceEnabled = x))" Help="Off by default. When on, website thermostat buttons rest 120 seconds after each command. Adjusting targets and saving settings is never debounced." />
+                    </MudGrid>
+                </MudExpansionPanel>
+            }
+            @if (Show("electricity budget monthly dollars spend pace alectra tou basis estimate cost")) {
+                <MudExpansionPanel Text="Electricity budget" Expanded="@IsSettingsSearchActive">
+                    <MudGrid Spacing="2">
+                        <SettingSwitch Label="Prefer staying inside a monthly budget" Value="_electricityBudgetEnabled" ValueChanged="@(v => SetDirty(v, x => _electricityBudgetEnabled = x))" Help="Each cycle the defender compares month-to-date spend against the pro-rated budget. Over pace: the room may run slightly warmer (biased to expensive on/mid-peak hours) to spend less. It is a preference, never a cutoff — the safety maximum below always wins, and it never cools below my temp." />
+                        <SettingDouble Label="Monthly budget ($)" Value="_electricityMonthlyBudgetDollars" ValueChanged="@(v => SetDirty(v, x => _electricityMonthlyBudgetDollars = x))" Min="0" Max="10000" Step="5" Help="The preferred monthly spend, measured on the basis selected below. Watch progress on the Energy page's Monthly budget card." />
+                        <SettingDouble Label="Aggressiveness (0–1)" Value="_electricityBudgetAggressiveness" ValueChanged="@(v => SetDirty(v, x => _electricityBudgetAggressiveness = x))" Min="0" Max="1" Step="0.1" Help="How hard to lean when over pace: 0 = never bias, 1 = full bias up to the max offset." />
+                        <SettingDouble Label="Max warmer offset (C)" Value="_electricityBudgetMaxSetpointOffsetCelsius" ValueChanged="@(v => SetDirty(v, x => _electricityBudgetMaxSetpointOffsetCelsius = x))" Min="0" Max="5" Step="0.5" Help="Hard cap on how much warmer the budget may let the room run." />
+                        <SettingDouble Label="Safety max room temp (C)" Value="_electricityBudgetSafetyMaxCelsius" ValueChanged="@(v => SetDirty(v, x => _electricityBudgetSafetyMaxCelsius = x))" Min="24" Max="32" Step="0.5" Help="At/above this room temperature the budget is ignored entirely and cooling always wins." />
+                        <MudItem xs="12" sm="8">
+                            <MudSelect T="string" Value="_electricityBudgetBasis" ValueChanged="@(v => SetDirty(v, x => _electricityBudgetBasis = x))" Label="Spend measured as" Variant="Variant.Outlined" Margin="Margin.Dense">
+                                <MudSelectItem T="string" Value="@("ac-estimate")">AC-only estimate — static Alectra TOU prices, no sensor needed</MudSelectItem>
+                                <MudSelectItem T="string" Value="@("all-in")">Whole-house all-in bill — live Alectra sensor (auto-falls back to the estimate while the sensor is down)</MudSelectItem>
+                            </MudSelect>
+                            <MudText Class="helper-text">Reliability rule: if the whole-house basis has no fresh Alectra power sample for 15 minutes, the budget automatically paces on the AC-only static-price estimate instead of silently stalling.</MudText>
+                        </MudItem>
+                    </MudGrid>
+                </MudExpansionPanel>
+            }
+            @if (Show("schedule weather activation always automation")) {
+                <MudExpansionPanel Text="Schedule & weather" Expanded="@IsSettingsSearchActive">
+                    <MudGrid Spacing="2">
+                        <SettingSwitch Label="Use custom schedule" Value="_scheduleEnabled" ValueChanged="@(v => SetDirty(v, x => _scheduleEnabled = x))" Help="Turn on the time-of-day target rules edited at the bottom of this page." />
+                        <MudItem xs="12" sm="8">
+                            <MudSelect T="string" Value="_weatherActivationMode" ValueChanged="@(v => SetDirty(v, x => _weatherActivationMode = x))" Label="Weather activation" Variant="Variant.Outlined" Margin="Margin.Dense">
+                                @foreach (var option in WeatherOptions)
+                                {
+                                    <MudSelectItem T="string" Value="@option.Value">@option.Label</MudSelectItem>
+                                }
+                            </MudSelect>
+                        </MudItem>
+                    </MudGrid>
+                </MudExpansionPanel>
+            }
+            @if (Show("base cooldown max touch frequency window")) {
+                <MudExpansionPanel Text="Cooldown" Expanded="@IsSettingsSearchActive">
+                    <MudGrid Spacing="2">
+                        <SettingInt Label="Base cooldown" Unit="s" Value="_baseCooldownSeconds" ValueChanged="@(v => SetDirty(v, x => _baseCooldownSeconds = x))" Min="0" Max="3600" Help="Quiet period after a manual change." />
+                        <SettingInt Label="Max cooldown" Unit="s" Value="_maxCooldownSeconds" ValueChanged="@(v => SetDirty(v, x => _maxCooldownSeconds = x))" Min="0" Max="7200" Help="Longest cooldown after many touches." />
+                        <SettingInt Label="Touch window" Unit="min" Value="_touchFrequencyWindowMinutes" ValueChanged="@(v => SetDirty(v, x => _touchFrequencyWindowMinutes = x))" Min="1" Max="1440" Help="How far back touches are counted." />
+                    </MudGrid>
+                </MudExpansionPanel>
+            }
+            @if (Show("cool mode restore delay band")) {
+                <MudExpansionPanel Text="Cool mode restore" Expanded="@IsSettingsSearchActive">
+                    <MudGrid Spacing="2">
+                        <SettingSwitch Label="Delay cool restore" Value="_coolModeRestoreDelayEnabled" ValueChanged="@(v => SetDirty(v, x => _coolModeRestoreDelayEnabled = x))" Help="Wait briefly before forcing cool mode back." />
+                        <SettingInt Label="Min wait" Unit="s" Value="_coolModeRestoreMinimumDelaySeconds" ValueChanged="@(v => SetDirty(v, x => _coolModeRestoreMinimumDelaySeconds = x))" Min="0" Max="3600" />
+                        <SettingInt Label="Max wait" Unit="s" Value="_coolModeRestoreMaximumDelaySeconds" ValueChanged="@(v => SetDirty(v, x => _coolModeRestoreMaximumDelaySeconds = x))" Min="0" Max="7200" />
+                        <SettingDouble Label="Safe band" Value="_coolModeRestoreComfortBandCelsius" ValueChanged="@(v => SetDirty(v, x => _coolModeRestoreComfortBandCelsius = x))" Min="0.1" Max="5" Help="Warmth allowed before restoring now." />
+                    </MudGrid>
+                </MudExpansionPanel>
+            }
+            @if (Show("conflict quiet tug of war stand down")) {
+                <MudExpansionPanel Text="Conflict quiet" Expanded="@IsSettingsSearchActive">
+                    <MudGrid Spacing="2">
+                        <SettingSwitch Label="Conflict quiet mode" Value="_conflictQuietModeEnabled" ValueChanged="@(v => SetDirty(v, x => _conflictQuietModeEnabled = x))" Help="Stand down during an obvious thermostat fight." />
+                        <SettingInt Label="Touches to stand down" Value="_conflictQuietTouchThreshold" ValueChanged="@(v => SetDirty(v, x => _conflictQuietTouchThreshold = x))" Min="2" Max="20" />
+                        <SettingInt Label="Stand-down" Unit="min" Value="_conflictQuietMinutes" ValueChanged="@(v => SetDirty(v, x => _conflictQuietMinutes = x))" Min="1" Max="240" />
+                        <SettingDouble Label="Safe band" Value="_conflictQuietComfortBandCelsius" ValueChanged="@(v => SetDirty(v, x => _conflictQuietComfortBandCelsius = x))" Min="0.1" Max="5" />
+                    </MudGrid>
+                </MudExpansionPanel>
+            }
+            @if (Show("weather drift outdoor timing")) {
+                <MudExpansionPanel Text="Weather drift timing" Expanded="@IsSettingsSearchActive">
+                    <MudGrid Spacing="2">
+                        <SettingSwitch Label="Weather drift timing" Value="_weatherDriftGuardEnabled" ValueChanged="@(v => SetDirty(v, x => _weatherDriftGuardEnabled = x))" Help="Time safe corrections to real outdoor movement." />
+                        <SettingInt Label="Window" Unit="min" Value="_weatherDriftWindowMinutes" ValueChanged="@(v => SetDirty(v, x => _weatherDriftWindowMinutes = x))" Min="5" Max="1440" />
+                        <SettingDouble Label="Min change" Value="_weatherDriftMinimumChangeCelsius" ValueChanged="@(v => SetDirty(v, x => _weatherDriftMinimumChangeCelsius = x))" Min="0.1" Max="5" />
+                        <SettingInt Label="Hold" Unit="min" Value="_weatherDriftHoldMinutes" ValueChanged="@(v => SetDirty(v, x => _weatherDriftHoldMinutes = x))" Min="1" Max="120" />
+                        <SettingDouble Label="Safe band" Value="_weatherDriftSafetyBandCelsius" ValueChanged="@(v => SetDirty(v, x => _weatherDriftSafetyBandCelsius = x))" Min="0.1" Max="5" />
+                    </MudGrid>
+                </MudExpansionPanel>
+            }
+            @if (Show("super defender phone home assistant remote wifi lockdown strict")) {
+                <MudExpansionPanel Text="Super Defender" Expanded="@IsSettingsSearchActive">
+                    <MudGrid Spacing="2">
+                        <SettingSwitch Label="Super Defender" Value="_superDefenderModeEnabled" ValueChanged="@(v => SetDirty(v, x => _superDefenderModeEnabled = x))" Help="Watch repeated phone or Home Assistant changes and tighten response." />
+                        <SettingSwitch Label="Bypass quiet waits" Value="_superDefenderBypassQuietTiming" ValueChanged="@(v => SetDirty(v, x => _superDefenderBypassQuietTiming = x))" Help="Skip subtle timing holds while Super Defender is active and cooling is needed." />
+                        <SettingInt Label="Remote changes" Value="_superDefenderRemoteChangeThreshold" ValueChanged="@(v => SetDirty(v, x => _superDefenderRemoteChangeThreshold = x))" Min="1" Max="20" Help="How many phone/Home Assistant-style changes arm it." />
+                        <SettingInt Label="Remote window" Unit="min" Value="_superDefenderWindowMinutes" ValueChanged="@(v => SetDirty(v, x => _superDefenderWindowMinutes = x))" Min="1" Max="1440" />
+                        <SettingInt Label="Strict hold" Unit="min" Value="_superDefenderHoldMinutes" ValueChanged="@(v => SetDirty(v, x => _superDefenderHoldMinutes = x))" Min="0" Max="240" />
+                        <SettingDouble Label="Strict safe band" Value="_superDefenderSafetyBandCelsius" ValueChanged="@(v => SetDirty(v, x => _superDefenderSafetyBandCelsius = x))" Min="0.1" Max="10" />
+                        <MudItem xs="12">
+                            <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true">Wi-Fi blocking is not automated here. Use router/MAC controls manually only if you accept the risk of losing thermostat monitoring and recovery.</MudAlert>
+                        </MudItem>
+                    </MudGrid>
+                </MudExpansionPanel>
+            }
+            @if (Show("remote settling home assistant phone automation quiet source")) {
+                <MudExpansionPanel Text="Remote settling" Expanded="@IsSettingsSearchActive">
+                    <MudGrid Spacing="2">
+                        <SettingSwitch Label="Remote settling" Value="_remoteSettlingGuardEnabled" ValueChanged="@(v => SetDirty(v, x => _remoteSettlingGuardEnabled = x))" Help="Wait quietly after repeated Home Assistant phone or automation changes." />
+                        <SettingInt Label="Remote trigger" Value="_remoteSettlingTriggerChanges" ValueChanged="@(v => SetDirty(v, x => _remoteSettlingTriggerChanges = x))" Min="1" Max="20" Help="Home Assistant-side changes needed before the quiet hold starts." />
+                        <SettingInt Label="Remote window" Unit="min" Value="_remoteSettlingWindowMinutes" ValueChanged="@(v => SetDirty(v, x => _remoteSettlingWindowMinutes = x))" Min="1" Max="1440" Help="How long phone/automation changes remain part of the pattern." />
+                        <SettingInt Label="Quiet hold" Unit="min" Value="_remoteSettlingHoldMinutes" ValueChanged="@(v => SetDirty(v, x => _remoteSettlingHoldMinutes = x))" Min="0" Max="240" Help="How long safe corrections wait after the remote pattern." />
+                        <SettingDouble Label="Safe band" Value="_remoteSettlingSafetyBandCelsius" ValueChanged="@(v => SetDirty(v, x => _remoteSettlingSafetyBandCelsius = x))" Min="0.1" Max="10" Help="Warmth allowed before remote settling stops waiting." />
+                    </MudGrid>
+                </MudExpansionPanel>
+            }
+            @if (Show("desired state enforcer owner exact target win automatically off setpoint escalate override interference notify schedule presence stealth")) {
+                <MudExpansionPanel Text="Desired-State Enforcer" Expanded="@IsSettingsSearchActive">
+                    <MudGrid Spacing="2">
+                        <MudItem xs="12">
+                            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">Makes your chosen AC state win automatically. If someone else turns it off or raises the setpoint, it restores your state. Owner changes (by Home Assistant user_id) are respected. Off by default.</MudAlert>
+                        </MudItem>
+                        <SettingSwitch Label="Enforcer mode" Value="_enforcerModeEnabled" ValueChanged="@(v => SetDirty(v, x => _enforcerModeEnabled = x))" Help="Master switch. When off, the existing stealth pipeline runs unchanged." />
+                        <SettingDouble Label="Exact target" Unit="C" Value="_enforcerTargetTemperatureCelsius" ValueChanged="@(v => SetDirty(v, x => _enforcerTargetTemperatureCelsius = x))" Min="0" Max="35" Help="The exact temperature to hold. 0 = follow the website target." />
+                        <SettingSwitch Label="Restore mode (turn back on)" Value="_enforcerEnforceMode" ValueChanged="@(v => SetDirty(v, x => _enforcerEnforceMode = x))" Help="Bring the unit back to cool if someone switches it off/heat/auto." />
+                        <SettingSwitch Label="Restore setpoint" Value="_enforcerEnforceSetpoint" ValueChanged="@(v => SetDirty(v, x => _enforcerEnforceSetpoint = x))" Help="Restore the target when the setpoint is moved away." />
+                        <SettingSwitch Label="Smart-stealth shaping" Value="_enforcerStealthShaping" ValueChanged="@(v => SetDirty(v, x => _enforcerStealthShaping = x))" Help="Ease the setpoint back through the human-like pipeline so it is less noticeable. Off = snap to the exact target." />
+                        <SettingSwitch Label="Respect owner changes" Value="_enforcerRespectOwner" ValueChanged="@(v => SetDirty(v, x => _enforcerRespectOwner = x))" Help="Do not fight changes made by the owner user ids below." />
+                        <MudItem xs="12">
+                            <MudTextField T="string" Value="_enforcerOwnerUserIds" ValueChanged="@(v => SetDirty(v, x => _enforcerOwnerUserIds = x))" Label="Owner Home Assistant user ids" Placeholder="abc123def456, ..." HelperText="Your own Home Assistant user_id(s), comma-separated. Changes from these are respected; everyone else is counteracted." Variant="Variant.Outlined" Margin="Margin.Dense" />
+                        </MudItem>
+                        <SettingInt Label="Debounce" Unit="s" Value="_enforcerDebounceSeconds" ValueChanged="@(v => SetDirty(v, x => _enforcerDebounceSeconds = x))" Min="2" Max="120" Help="A deviation must persist this long before enforcing." />
+                        <SettingInt Label="Cooldown" Unit="s" Value="_enforcerCooldownSeconds" ValueChanged="@(v => SetDirty(v, x => _enforcerCooldownSeconds = x))" Min="10" Max="600" Help="Minimum gap between re-asserts (also waits out the Home Assistant echo)." />
+                        <SettingInt Label="Rate window" Unit="min" Value="_enforcerRateWindowMinutes" ValueChanged="@(v => SetDirty(v, x => _enforcerRateWindowMinutes = x))" Min="1" Max="240" Help="Window for the rate limit and override counting." />
+                        <SettingInt Label="Max asserts / window" Value="_enforcerMaxAssertsPerWindow" ValueChanged="@(v => SetDirty(v, x => _enforcerMaxAssertsPerWindow = x))" Min="1" Max="60" Help="Hold and escalate instead of thrashing past this many asserts." />
+                        <SettingInt Label="Escalate after overrides" Value="_enforcerEscalateAfterOverrides" ValueChanged="@(v => SetDirty(v, x => _enforcerEscalateAfterOverrides = x))" Min="1" Max="20" Help="Switch to firm mode after this many unwanted overrides in the window." />
+                        <SettingInt Label="Backoff base" Unit="s" Value="_enforcerBackoffBaseSeconds" ValueChanged="@(v => SetDirty(v, x => _enforcerBackoffBaseSeconds = x))" Min="5" Max="300" Help="Exponential backoff base when the device does not confirm commands." />
+                        <SettingInt Label="Backoff max" Unit="s" Value="_enforcerBackoffMaxSeconds" ValueChanged="@(v => SetDirty(v, x => _enforcerBackoffMaxSeconds = x))" Min="30" Max="3600" Help="Cap for the backoff wait." />
+                        <SettingSwitch Label="Schedule window" Value="_enforcerScheduleEnabled" ValueChanged="@(v => SetDirty(v, x => _enforcerScheduleEnabled = x))" Help="Only enforce inside the time window below." />
+                        <MudItem xs="6">
+                            <MudTextField T="string" Value="_enforcerStartTime" ValueChanged="@(v => SetDirty(v, x => _enforcerStartTime = x))" Label="Start (HH:mm)" Placeholder="00:00" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                        </MudItem>
+                        <MudItem xs="6">
+                            <MudTextField T="string" Value="_enforcerEndTime" ValueChanged="@(v => SetDirty(v, x => _enforcerEndTime = x))" Label="End (HH:mm)" Placeholder="23:59" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                        </MudItem>
+                        <SettingSwitch Label="Only when home" Value="_enforcerRequirePresence" ValueChanged="@(v => SetDirty(v, x => _enforcerRequirePresence = x))" Help="Only enforce while presence shows someone home." />
+                        <SettingSwitch Label="Notify on defend/interference" Value="_enforcerNotifyEnabled" ValueChanged="@(v => SetDirty(v, x => _enforcerNotifyEnabled = x))" Help="Send a Home Assistant notification (needs HomeAssistant:NotifyService configured)." />
+                        <SettingSwitch Label="Use trained models" Value="_enforcerUseLearning" ValueChanged="@(v => SetDirty(v, x => _enforcerUseLearning = x))" Help="Pace enforcement with the learned interference/cadence models once trained." />
+                    </MudGrid>
+                </MudExpansionPanel>
+            }
+        </MudExpansionPanels>
+    </SectionCard>
+
+    @* ───────────── Recovery ───────────── *@
+    <SectionCard Title="Recovery" Help="Comfort Sync quiet recovery and natural walkback.">
+        <MudExpansionPanels MultiExpansion="true" Class="setting-panels">
+            @if (Show("comfort sync quiet recovery adaptive nudge hold command gap")) {
+                <MudExpansionPanel Text="Comfort Sync (quiet recovery)" Expanded="@IsSettingsSearchActive">
+                    <MudGrid Spacing="2">
+                        <SettingSwitch Label="Use quiet recovery" Value="_naturalRecoveryEnabled" ValueChanged="@(v => SetDirty(v, x => _naturalRecoveryEnabled = x))" Help="Space out and soften corrections." />
+                        <SettingSwitch Label="Auto quiet level" Value="_adaptiveQuietnessEnabled" ValueChanged="@(v => SetDirty(v, x => _adaptiveQuietnessEnabled = x))" Help="Let repeated touches raise the quiet level." />
+                        <SettingInt Label="Touches to quiet" Value="_adaptiveQuietTouchThreshold" ValueChanged="@(v => SetDirty(v, x => _adaptiveQuietTouchThreshold = x))" Min="1" Max="20" />
+                        <SettingInt Label="Max auto wait" Unit="s" Value="_maximumAdaptiveDelaySeconds" ValueChanged="@(v => SetDirty(v, x => _maximumAdaptiveDelaySeconds = x))" Min="0" Max="7200" />
+                        <SettingDouble Label="Smallest auto nudge" Value="_minimumAdaptiveStepCelsius" ValueChanged="@(v => SetDirty(v, x => _minimumAdaptiveStepCelsius = x))" Min="0.1" Max="5" />
+                        <SettingInt Label="Max auto hold" Unit="%" Value="_maximumAdaptiveHoldChancePercent" ValueChanged="@(v => SetDirty(v, x => _maximumAdaptiveHoldChancePercent = x))" Min="0" Max="100" />
+                        <SettingInt Label="Max auto gap" Unit="s" Value="_maximumAdaptiveCommandGapSeconds" ValueChanged="@(v => SetDirty(v, x => _maximumAdaptiveCommandGapSeconds = x))" Min="0" Max="7200" />
+                        <SettingInt Label="Min quiet wait" Unit="s" Value="_minimumNaturalDelaySeconds" ValueChanged="@(v => SetDirty(v, x => _minimumNaturalDelaySeconds = x))" Min="0" Max="3600" />
+                        <SettingInt Label="Max quiet wait" Unit="s" Value="_maximumNaturalDelaySeconds" ValueChanged="@(v => SetDirty(v, x => _maximumNaturalDelaySeconds = x))" Min="0" Max="7200" />
+                        <SettingDouble Label="Nudge size" Value="_naturalStepCelsius" ValueChanged="@(v => SetDirty(v, x => _naturalStepCelsius = x))" Min="0.1" Max="5" />
+                        <SettingInt Label="Hold chance" Unit="%" Value="_naturalHoldChancePercent" ValueChanged="@(v => SetDirty(v, x => _naturalHoldChancePercent = x))" Min="0" Max="100" />
+                        <SettingInt Label="Max holds" Value="_maxNaturalHolds" ValueChanged="@(v => SetDirty(v, x => _maxNaturalHolds = x))" Min="0" Max="10" />
+                        <SettingInt Label="Command gap" Unit="s" Value="_minimumCommandGapSeconds" ValueChanged="@(v => SetDirty(v, x => _minimumCommandGapSeconds = x))" Min="0" Max="3600" />
+                        <SettingDouble Label="Too-hot override" Value="_naturalSafetyOverrideCelsius" ValueChanged="@(v => SetDirty(v, x => _naturalSafetyOverrideCelsius = x))" Min="0.1" Max="10" Help="Warmth above target that skips all quiet waits." />
+                    </MudGrid>
+                </MudExpansionPanel>
+            }
+            @if (Show("natural walkback step jitter")) {
+                <MudExpansionPanel Text="Natural walkback" Expanded="@IsSettingsSearchActive">
+                    <MudGrid Spacing="2">
+                        <SettingSwitch Label="Natural walkback" Value="_naturalWalkbackEnabled" ValueChanged="@(v => SetDirty(v, x => _naturalWalkbackEnabled = x))" Help="Walk corrections back in small, varied steps." />
+                        <SettingInt Label="Walkback touches" Value="_naturalWalkbackTriggerTouches" ValueChanged="@(v => SetDirty(v, x => _naturalWalkbackTriggerTouches = x))" Min="1" Max="20" />
+                        <SettingDouble Label="Walkback step" Value="_naturalWalkbackStepCelsius" ValueChanged="@(v => SetDirty(v, x => _naturalWalkbackStepCelsius = x))" Min="0.1" Max="5" />
+                        <SettingDouble Label="Tiny variation" Value="_naturalWalkbackJitterCelsius" ValueChanged="@(v => SetDirty(v, x => _naturalWalkbackJitterCelsius = x))" Min="0" Max="0.5" />
+                        <SettingDouble Label="Safe band" Value="_naturalWalkbackSafetyBandCelsius" ValueChanged="@(v => SetDirty(v, x => _naturalWalkbackSafetyBandCelsius = x))" Min="0.1" Max="5" />
+                    </MudGrid>
+                </MudExpansionPanel>
+            }
+        </MudExpansionPanels>
+    </SectionCard>
+
+    @* ───────────── Wall touch ───────────── *@
+    <SectionCard Title="Wall touch" Help="How the defender reacts to people changing the wall thermostat.">
+        <MudExpansionPanels MultiExpansion="true" Class="setting-panels">
+            @if (Show("wall settling tapping")) {
+                <MudExpansionPanel Text="Wall settling" Expanded="@IsSettingsSearchActive">
+                    <MudGrid Spacing="2">
+                        <SettingSwitch Label="Wall settling guard" Value="_wallSettlingGuardEnabled" ValueChanged="@(v => SetDirty(v, x => _wallSettlingGuardEnabled = x))" Help="Wait for tapping to stop before correcting." />
+                        <SettingInt Label="Settle touches" Value="_wallSettlingMinimumTouches" ValueChanged="@(v => SetDirty(v, x => _wallSettlingMinimumTouches = x))" Min="1" Max="20" />
+                        <SettingInt Label="Window" Unit="min" Value="_wallSettlingWindowMinutes" ValueChanged="@(v => SetDirty(v, x => _wallSettlingWindowMinutes = x))" Min="1" Max="1440" />
+                        <SettingInt Label="Base settle" Unit="s" Value="_wallSettlingBaseSeconds" ValueChanged="@(v => SetDirty(v, x => _wallSettlingBaseSeconds = x))" Min="0" Max="1800" />
+                        <SettingInt Label="Pressure extra" Unit="s" Value="_wallSettlingPressureExtraSeconds" ValueChanged="@(v => SetDirty(v, x => _wallSettlingPressureExtraSeconds = x))" Min="0" Max="3600" />
+                        <SettingDouble Label="Safe band" Value="_wallSettlingSafetyBandCelsius" ValueChanged="@(v => SetDirty(v, x => _wallSettlingSafetyBandCelsius = x))" Min="0.1" Max="5" />
+                    </MudGrid>
+                </MudExpansionPanel>
+            }
+            @if (Show("tug war truce alternating thermostat fight flips up down suspicion"))
+            {
+                <MudExpansionPanel Text="Tug-of-War Truce" Expanded="@IsSettingsSearchActive">
+                    <MudGrid Spacing="2">
+                        <SettingSwitch Label="Tug-of-War Truce" Value="_tugOfWarTruceEnabled" ValueChanged="@(v => SetDirty(v, x => _tugOfWarTruceEnabled = x))" Help="Hold safe answer-backs when the thermostat keeps bouncing up and down." />
+                        <SettingInt Label="Flip trigger" Value="_tugOfWarTruceMinimumFlips" ValueChanged="@(v => SetDirty(v, x => _tugOfWarTruceMinimumFlips = x))" Min="1" Max="20" />
+                        <SettingInt Label="Flip window" Unit="min" Value="_tugOfWarTruceWindowMinutes" ValueChanged="@(v => SetDirty(v, x => _tugOfWarTruceWindowMinutes = x))" Min="1" Max="240" />
+                        <SettingInt Label="Truce hold" Unit="min" Value="_tugOfWarTruceHoldMinutes" ValueChanged="@(v => SetDirty(v, x => _tugOfWarTruceHoldMinutes = x))" Min="0" Max="240" />
+                        <SettingDouble Label="Safe band" Value="_tugOfWarTruceSafetyBandCelsius" ValueChanged="@(v => SetDirty(v, x => _tugOfWarTruceSafetyBandCelsius = x))" Min="0.1" Max="5" />
+                    </MudGrid>
+                </MudExpansionPanel>
+            }
+            @if (Show("touch signature learned step")) {
+                <MudExpansionPanel Text="Touch signature" Expanded="@IsSettingsSearchActive">
+                    <MudGrid Spacing="2">
+                        <SettingSwitch Label="Touch signature" Value="_touchSignatureEnabled" ValueChanged="@(v => SetDirty(v, x => _touchSignatureEnabled = x))" Help="Match nudges to the way the wall is changed." />
+                        <SettingInt Label="Signature touches" Value="_touchSignatureTriggerTouches" ValueChanged="@(v => SetDirty(v, x => _touchSignatureTriggerTouches = x))" Min="1" Max="20" />
+                        <SettingInt Label="Memory" Unit="min" Value="_touchSignatureRetentionMinutes" ValueChanged="@(v => SetDirty(v, x => _touchSignatureRetentionMinutes = x))" Min="1" Max="1440" />
+                        <SettingDouble Label="Small step" Value="_touchSignatureMinimumStepCelsius" ValueChanged="@(v => SetDirty(v, x => _touchSignatureMinimumStepCelsius = x))" Min="0.1" Max="5" />
+                        <SettingDouble Label="Large step" Value="_touchSignatureMaximumStepCelsius" ValueChanged="@(v => SetDirty(v, x => _touchSignatureMaximumStepCelsius = x))" Min="0.1" Max="5" />
+                        <SettingDouble Label="Safe band" Value="_touchSignatureSafetyBandCelsius" ValueChanged="@(v => SetDirty(v, x => _touchSignatureSafetyBandCelsius = x))" Min="0.1" Max="5" />
+                    </MudGrid>
+                </MudExpansionPanel>
+            }
+            @if (Show("human nudge normal thermostat step less suspicious")) {
+                <MudExpansionPanel Text="Human nudge" Expanded="@IsSettingsSearchActive">
+                    <MudGrid Spacing="2">
+                        <SettingSwitch Label="Human nudge" Value="_humanNudgeEnabled" ValueChanged="@(v => SetDirty(v, x => _humanNudgeEnabled = x))" Help="Snap safe commands to normal thermostat-looking steps." />
+                        <SettingInt Label="Nudge touches" Value="_humanNudgeTriggerTouches" ValueChanged="@(v => SetDirty(v, x => _humanNudgeTriggerTouches = x))" Min="1" Max="20" />
+                        <SettingDouble Label="Step" Value="_humanNudgeStepCelsius" ValueChanged="@(v => SetDirty(v, x => _humanNudgeStepCelsius = x))" Min="0.1" Max="2" />
+                        <SettingDouble Label="Safe band" Value="_humanNudgeSafetyBandCelsius" ValueChanged="@(v => SetDirty(v, x => _humanNudgeSafetyBandCelsius = x))" Min="0.1" Max="5" />
+                    </MudGrid>
+                </MudExpansionPanel>
+            }
+            @if (Show("visibility guard noticed")) {
+                <MudExpansionPanel Text="Visibility guard" Expanded="@IsSettingsSearchActive">
+                    <MudGrid Spacing="2">
+                        <SettingSwitch Label="Visibility guard" Value="_visibilityGuardEnabled" ValueChanged="@(v => SetDirty(v, x => _visibilityGuardEnabled = x))" Help="Slow down when a touch lands right after a command." />
+                        <SettingInt Label="Notice trigger" Value="_visibilityGuardTriggerNotices" ValueChanged="@(v => SetDirty(v, x => _visibilityGuardTriggerNotices = x))" Min="1" Max="20" />
+                        <SettingInt Label="Notice window" Unit="min" Value="_visibilityGuardNoticeWindowMinutes" ValueChanged="@(v => SetDirty(v, x => _visibilityGuardNoticeWindowMinutes = x))" Min="1" Max="1440" />
+                        <SettingInt Label="After command" Unit="s" Value="_visibilityGuardAfterCommandSeconds" ValueChanged="@(v => SetDirty(v, x => _visibilityGuardAfterCommandSeconds = x))" Min="15" Max="3600" />
+                        <SettingInt Label="Min hold" Unit="min" Value="_visibilityGuardMinimumHoldMinutes" ValueChanged="@(v => SetDirty(v, x => _visibilityGuardMinimumHoldMinutes = x))" Min="1" Max="240" />
+                        <SettingInt Label="Max hold" Unit="min" Value="_visibilityGuardMaximumHoldMinutes" ValueChanged="@(v => SetDirty(v, x => _visibilityGuardMaximumHoldMinutes = x))" Min="1" Max="480" />
+                        <SettingDouble Label="Safe band" Value="_visibilityGuardSafetyBandCelsius" ValueChanged="@(v => SetDirty(v, x => _visibilityGuardSafetyBandCelsius = x))" Min="0.1" Max="5" />
+                    </MudGrid>
+                </MudExpansionPanel>
+            }
+            @if (Show("routine timing rhythm")) {
+                <MudExpansionPanel Text="Routine timing" Expanded="@IsSettingsSearchActive">
+                    <MudGrid Spacing="2">
+                        <SettingSwitch Label="Routine timing" Value="_routineTimingEnabled" ValueChanged="@(v => SetDirty(v, x => _routineTimingEnabled = x))" Help="Line corrections up with a normal rhythm." />
+                        <SettingInt Label="Routine touches" Value="_routineTimingTriggerTouches" ValueChanged="@(v => SetDirty(v, x => _routineTimingTriggerTouches = x))" Min="1" Max="20" />
+                        <SettingInt Label="Interval" Unit="min" Value="_routineTimingIntervalMinutes" ValueChanged="@(v => SetDirty(v, x => _routineTimingIntervalMinutes = x))" Min="1" Max="60" />
+                        <SettingInt Label="Wiggle" Unit="min" Value="_routineTimingJitterMinutes" ValueChanged="@(v => SetDirty(v, x => _routineTimingJitterMinutes = x))" Min="0" Max="30" />
+                        <SettingInt Label="Max wait" Unit="min" Value="_routineTimingMaxDelayMinutes" ValueChanged="@(v => SetDirty(v, x => _routineTimingMaxDelayMinutes = x))" Min="1" Max="180" />
+                        <SettingDouble Label="Safe band" Value="_routineTimingSafetyBandCelsius" ValueChanged="@(v => SetDirty(v, x => _routineTimingSafetyBandCelsius = x))" Min="0.1" Max="5" />
+                    </MudGrid>
+                </MudExpansionPanel>
+            }
+            @if (Show("comfort budget rolling limit")) {
+                <MudExpansionPanel Text="Comfort budget" Expanded="@IsSettingsSearchActive">
+                    <MudGrid Spacing="2">
+                        <SettingSwitch Label="Comfort budget" Value="_comfortBudgetEnabled" ValueChanged="@(v => SetDirty(v, x => _comfortBudgetEnabled = x))" Help="Cap safe corrections inside a window." />
+                        <SettingInt Label="Window" Unit="min" Value="_comfortBudgetWindowMinutes" ValueChanged="@(v => SetDirty(v, x => _comfortBudgetWindowMinutes = x))" Min="1" Max="240" />
+                        <SettingInt Label="Adjustments" Value="_comfortBudgetMaxCommands" ValueChanged="@(v => SetDirty(v, x => _comfortBudgetMaxCommands = x))" Min="1" Max="30" />
+                        <SettingDouble Label="Safe band" Value="_comfortBudgetSafetyBandCelsius" ValueChanged="@(v => SetDirty(v, x => _comfortBudgetSafetyBandCelsius = x))" Min="0.1" Max="5" />
+                    </MudGrid>
+                </MudExpansionPanel>
+            }
+            @if (Show("command camouflage helper command spacing cover less obvious")) {
+                <MudExpansionPanel Text="Command camouflage" Expanded="@IsSettingsSearchActive">
+                    <MudGrid Spacing="2">
+                        <SettingSwitch Label="Command camouflage" Value="_commandCamouflageEnabled" ValueChanged="@(v => SetDirty(v, x => _commandCamouflageEnabled = x))" Help="Let a recent helper command breathe before another safe correction." />
+                        <SettingInt Label="Min gap" Unit="s" Value="_commandCamouflageMinimumGapSeconds" ValueChanged="@(v => SetDirty(v, x => _commandCamouflageMinimumGapSeconds = x))" Min="0" Max="1800" />
+                        <SettingInt Label="Pressure extra" Unit="s" Value="_commandCamouflagePressureExtraSeconds" ValueChanged="@(v => SetDirty(v, x => _commandCamouflagePressureExtraSeconds = x))" Min="0" Max="3600" />
+                        <SettingDouble Label="Safe band" Value="_commandCamouflageSafetyBandCelsius" ValueChanged="@(v => SetDirty(v, x => _commandCamouflageSafetyBandCelsius = x))" Min="0.1" Max="5" />
+                    </MudGrid>
+                </MudExpansionPanel>
+            }
+            @if (Show("stealth governor suspicion pressure low profile quiet")) {
+                <MudExpansionPanel Text="Stealth governor" Expanded="@IsSettingsSearchActive">
+                    <MudGrid Spacing="2">
+                        <SettingSwitch Label="Stealth governor" Value="_stealthGovernorEnabled" ValueChanged="@(v => SetDirty(v, x => _stealthGovernorEnabled = x))" Help="Hold safe corrections when the overall pressure score is too loud." />
+                        <SettingInt Label="Trigger score" Value="_stealthGovernorTriggerScore" ValueChanged="@(v => SetDirty(v, x => _stealthGovernorTriggerScore = x))" Min="1" Max="100" />
+                        <SettingInt Label="Min hold" Unit="min" Value="_stealthGovernorMinimumHoldMinutes" ValueChanged="@(v => SetDirty(v, x => _stealthGovernorMinimumHoldMinutes = x))" Min="1" Max="240" />
+                        <SettingInt Label="Max hold" Unit="min" Value="_stealthGovernorMaximumHoldMinutes" ValueChanged="@(v => SetDirty(v, x => _stealthGovernorMaximumHoldMinutes = x))" Min="1" Max="480" />
+                        <SettingDouble Label="Safe band" Value="_stealthGovernorSafetyBandCelsius" ValueChanged="@(v => SetDirty(v, x => _stealthGovernorSafetyBandCelsius = x))" Min="0.1" Max="5" />
+                    </MudGrid>
+                </MudExpansionPanel>
+            }
+            @if (Show("natural cadence slot")) {
+                <MudExpansionPanel Text="Natural cadence" Expanded="@IsSettingsSearchActive">
+                    <MudGrid Spacing="2">
+                        <SettingSwitch Label="Natural cadence" Value="_naturalCadenceEnabled" ValueChanged="@(v => SetDirty(v, x => _naturalCadenceEnabled = x))" Help="Pick a varied future slot for safe nudges." />
+                        <SettingInt Label="Cadence touches" Value="_naturalCadenceTriggerTouches" ValueChanged="@(v => SetDirty(v, x => _naturalCadenceTriggerTouches = x))" Min="1" Max="20" />
+                        <SettingInt Label="Min" Unit="min" Value="_naturalCadenceMinimumMinutes" ValueChanged="@(v => SetDirty(v, x => _naturalCadenceMinimumMinutes = x))" Min="1" Max="120" />
+                        <SettingInt Label="Max" Unit="min" Value="_naturalCadenceMaximumMinutes" ValueChanged="@(v => SetDirty(v, x => _naturalCadenceMaximumMinutes = x))" Min="1" Max="240" />
+                        <SettingInt Label="Wiggle" Unit="min" Value="_naturalCadenceJitterMinutes" ValueChanged="@(v => SetDirty(v, x => _naturalCadenceJitterMinutes = x))" Min="0" Max="60" />
+                        <SettingDouble Label="Safe band" Value="_naturalCadenceSafetyBandCelsius" ValueChanged="@(v => SetDirty(v, x => _naturalCadenceSafetyBandCelsius = x))" Min="0.1" Max="5" />
+                    </MudGrid>
+                </MudExpansionPanel>
+            }
+            @if (Show("comfort pace planner high frequency climate slot")) {
+                <MudExpansionPanel Text="Comfort Pace" Expanded="@IsSettingsSearchActive">
+                    <MudGrid Spacing="2">
+                        <SettingSwitch Label="Comfort Pace" Value="_naturalChangePlannerEnabled" ValueChanged="@(v => SetDirty(v, x => _naturalChangePlannerEnabled = x))" Help="Pace heavy wall fighting into calm slots." />
+                        <SettingInt Label="Pace touches" Value="_naturalChangePlannerTriggerTouches" ValueChanged="@(v => SetDirty(v, x => _naturalChangePlannerTriggerTouches = x))" Min="1" Max="20" />
+                        <SettingInt Label="Min" Unit="min" Value="_naturalChangePlannerMinimumMinutes" ValueChanged="@(v => SetDirty(v, x => _naturalChangePlannerMinimumMinutes = x))" Min="1" Max="240" />
+                        <SettingInt Label="Max" Unit="min" Value="_naturalChangePlannerMaximumMinutes" ValueChanged="@(v => SetDirty(v, x => _naturalChangePlannerMaximumMinutes = x))" Min="1" Max="480" />
+                        <SettingInt Label="Wiggle" Unit="min" Value="_naturalChangePlannerJitterMinutes" ValueChanged="@(v => SetDirty(v, x => _naturalChangePlannerJitterMinutes = x))" Min="0" Max="120" />
+                        <SettingDouble Label="Safe band" Value="_naturalChangePlannerSafetyBandCelsius" ValueChanged="@(v => SetDirty(v, x => _naturalChangePlannerSafetyBandCelsius = x))" Min="0.1" Max="5" />
+                        <SettingSwitch Label="Use weather slots" Value="_naturalChangePlannerPreferWeatherSlots" ValueChanged="@(v => SetDirty(v, x => _naturalChangePlannerPreferWeatherSlots = x))" />
+                        <SettingSwitch Label="Use sensor beat" Value="_naturalChangePlannerPreferSensorBeat" ValueChanged="@(v => SetDirty(v, x => _naturalChangePlannerPreferSensorBeat = x))" />
+                    </MudGrid>
+                </MudExpansionPanel>
+            }
+            @if (Show("comfort envelope range")) {
+                <MudExpansionPanel Text="Comfort envelope" Expanded="@IsSettingsSearchActive">
+                    <MudGrid Spacing="2">
+                        <SettingSwitch Label="Comfort envelope" Value="_comfortEnvelopeEnabled" ValueChanged="@(v => SetDirty(v, x => _comfortEnvelopeEnabled = x))" Help="Let tiny safe wall preferences rest." />
+                        <SettingInt Label="Envelope touches" Value="_comfortEnvelopeTriggerTouches" ValueChanged="@(v => SetDirty(v, x => _comfortEnvelopeTriggerTouches = x))" Min="1" Max="20" />
+                        <SettingInt Label="Hold" Unit="min" Value="_comfortEnvelopeHoldMinutes" ValueChanged="@(v => SetDirty(v, x => _comfortEnvelopeHoldMinutes = x))" Min="0" Max="240" />
+                        <SettingDouble Label="Range" Value="_comfortEnvelopeMaxOffsetCelsius" ValueChanged="@(v => SetDirty(v, x => _comfortEnvelopeMaxOffsetCelsius = x))" Min="0.1" Max="5" />
+                        <SettingDouble Label="Safe band" Value="_comfortEnvelopeSafetyBandCelsius" ValueChanged="@(v => SetDirty(v, x => _comfortEnvelopeSafetyBandCelsius = x))" Min="0.1" Max="5" />
+                    </MudGrid>
+                </MudExpansionPanel>
+            }
+            @if (Show("comfort compromise blend fade")) {
+                <MudExpansionPanel Text="Comfort compromise" Expanded="@IsSettingsSearchActive">
+                    <MudGrid Spacing="2">
+                        <SettingSwitch Label="Comfort compromise" Value="_comfortCompromiseEnabled" ValueChanged="@(v => SetDirty(v, x => _comfortCompromiseEnabled = x))" Help="Blend a wall choice in, then fade it back." />
+                        <SettingInt Label="Compromise touches" Value="_comfortCompromiseTriggerTouches" ValueChanged="@(v => SetDirty(v, x => _comfortCompromiseTriggerTouches = x))" Min="1" Max="20" />
+                        <SettingInt Label="Hold" Unit="min" Value="_comfortCompromiseHoldMinutes" ValueChanged="@(v => SetDirty(v, x => _comfortCompromiseHoldMinutes = x))" Min="0" Max="240" />
+                        <SettingInt Label="Fade-back" Unit="min" Value="_comfortCompromiseDecayMinutes" ValueChanged="@(v => SetDirty(v, x => _comfortCompromiseDecayMinutes = x))" Min="1" Max="240" />
+                        <SettingDouble Label="Max blend" Value="_comfortCompromiseMaxOffsetCelsius" ValueChanged="@(v => SetDirty(v, x => _comfortCompromiseMaxOffsetCelsius = x))" Min="0.1" Max="5" />
+                        <SettingDouble Label="Safe band" Value="_comfortCompromiseSafetyBandCelsius" ValueChanged="@(v => SetDirty(v, x => _comfortCompromiseSafetyBandCelsius = x))" Min="0.1" Max="5" />
+                    </MudGrid>
+                </MudExpansionPanel>
+            }
+            @if (Show("comfort memory time of day learn")) {
+                <MudExpansionPanel Text="Comfort memory" Expanded="@IsSettingsSearchActive">
+                    <MudGrid Spacing="2">
+                        <SettingSwitch Label="Comfort memory" Value="_comfortMemoryEnabled" ValueChanged="@(v => SetDirty(v, x => _comfortMemoryEnabled = x))" Help="Learn a small time-of-day target bias." />
+                        <SettingInt Label="Memory touches" Value="_comfortMemoryLearningTouches" ValueChanged="@(v => SetDirty(v, x => _comfortMemoryLearningTouches = x))" Min="1" Max="20" />
+                        <SettingInt Label="Retention" Unit="h" Value="_comfortMemoryRetentionHours" ValueChanged="@(v => SetDirty(v, x => _comfortMemoryRetentionHours = x))" Min="1" Max="168" />
+                        <SettingDouble Label="Max bias" Value="_comfortMemoryMaxOffsetCelsius" ValueChanged="@(v => SetDirty(v, x => _comfortMemoryMaxOffsetCelsius = x))" Min="0.1" Max="3" />
+                        <SettingDouble Label="Safe band" Value="_comfortMemorySafetyBandCelsius" ValueChanged="@(v => SetDirty(v, x => _comfortMemorySafetyBandCelsius = x))" Min="0.1" Max="3" />
+                    </MudGrid>
+                </MudExpansionPanel>
+            }
+            @if (Show("manual comfort grace respect wall changes")) {
+                <MudExpansionPanel Text="Manual comfort grace" Expanded="@IsSettingsSearchActive">
+                    <MudGrid Spacing="2">
+                        <SettingSwitch Label="Respect wall changes" Value="_manualComfortGraceEnabled" ValueChanged="@(v => SetDirty(v, x => _manualComfortGraceEnabled = x))" Help="Leave a wall change alone while comfortable." />
+                        <SettingInt Label="Grace" Unit="min" Value="_manualComfortGraceMinutes" ValueChanged="@(v => SetDirty(v, x => _manualComfortGraceMinutes = x))" Min="0" Max="240" />
+                        <SettingDouble Label="Grace band" Value="_manualComfortGraceBandCelsius" ValueChanged="@(v => SetDirty(v, x => _manualComfortGraceBandCelsius = x))" Min="0.1" Max="5" />
+                    </MudGrid>
+                </MudExpansionPanel>
+            }
+            @if (Show("touch intent warmer cooler direction")) {
+                <MudExpansionPanel Text="Touch intent" Expanded="@IsSettingsSearchActive">
+                    <MudGrid Spacing="2">
+                        <SettingSwitch Label="Touch intent" Value="_touchIntentEnabled" ValueChanged="@(v => SetDirty(v, x => _touchIntentEnabled = x))" Help="Extend grace for a clear warmer pattern." />
+                        <SettingInt Label="Intent touches" Value="_touchIntentMinimumTouches" ValueChanged="@(v => SetDirty(v, x => _touchIntentMinimumTouches = x))" Min="1" Max="20" />
+                        <SettingInt Label="Window" Unit="min" Value="_touchIntentWindowMinutes" ValueChanged="@(v => SetDirty(v, x => _touchIntentWindowMinutes = x))" Min="1" Max="1440" />
+                        <SettingDouble Label="Warmer pattern" Value="_touchIntentNetWarmThresholdCelsius" ValueChanged="@(v => SetDirty(v, x => _touchIntentNetWarmThresholdCelsius = x))" Min="0.1" Max="5" />
+                        <SettingInt Label="Extra grace" Unit="min" Value="_touchIntentExtraGraceMinutes" ValueChanged="@(v => SetDirty(v, x => _touchIntentExtraGraceMinutes = x))" Min="0" Max="240" />
+                        <SettingDouble Label="Safe band" Value="_touchIntentSafetyBandCelsius" ValueChanged="@(v => SetDirty(v, x => _touchIntentSafetyBandCelsius = x))" Min="0.1" Max="5" />
+                    </MudGrid>
+                </MudExpansionPanel>
+            }
+            @if (Show("cooler intent fast lane")) {
+                <MudExpansionPanel Text="Cooler intent fast lane" Expanded="@IsSettingsSearchActive">
+                    <MudGrid Spacing="2">
+                        <SettingSwitch Label="Cooler intent fast lane" Value="_coolerIntentFastLaneEnabled" ValueChanged="@(v => SetDirty(v, x => _coolerIntentFastLaneEnabled = x))" Help="Skip quiet waits when people keep dialing cooler." />
+                        <SettingInt Label="Cooler touches" Value="_coolerIntentMinimumTouches" ValueChanged="@(v => SetDirty(v, x => _coolerIntentMinimumTouches = x))" Min="1" Max="20" />
+                        <SettingInt Label="Window" Unit="min" Value="_coolerIntentWindowMinutes" ValueChanged="@(v => SetDirty(v, x => _coolerIntentWindowMinutes = x))" Min="1" Max="1440" />
+                        <SettingInt Label="Fast-lane" Unit="min" Value="_coolerIntentHoldMinutes" ValueChanged="@(v => SetDirty(v, x => _coolerIntentHoldMinutes = x))" Min="0" Max="240" />
+                        <SettingDouble Label="Cooler pattern" Value="_coolerIntentNetCoolThresholdCelsius" ValueChanged="@(v => SetDirty(v, x => _coolerIntentNetCoolThresholdCelsius = x))" Min="0.1" Max="5" />
+                        <SettingDouble Label="Safe band" Value="_coolerIntentSafetyBandCelsius" ValueChanged="@(v => SetDirty(v, x => _coolerIntentSafetyBandCelsius = x))" Min="0.1" Max="5" />
+                    </MudGrid>
+                </MudExpansionPanel>
+            }
+        </MudExpansionPanels>
+    </SectionCard>
+
+    @* ───────────── Sensor timing ───────────── *@
+    <SectionCard Title="Sensor timing" Help="Lining corrections up with real Home Assistant sensor signals.">
+        <MudExpansionPanels MultiExpansion="true" Class="setting-panels">
+            @if (Show("setpoint echo confirm")) {
+                <MudExpansionPanel Text="Setpoint echo" Expanded="@IsSettingsSearchActive">
+                    <MudGrid Spacing="2">
+                        <SettingSwitch Label="Setpoint echo" Value="_setpointEchoGuardEnabled" ValueChanged="@(v => SetDirty(v, x => _setpointEchoGuardEnabled = x))" Help="Wait for Home Assistant to confirm the last setpoint." />
+                        <SettingInt Label="Echo wait" Unit="s" Value="_setpointEchoGraceSeconds" ValueChanged="@(v => SetDirty(v, x => _setpointEchoGraceSeconds = x))" Min="5" Max="300" />
+                        <SettingDouble Label="Safe band" Value="_setpointEchoSafetyBandCelsius" ValueChanged="@(v => SetDirty(v, x => _setpointEchoSafetyBandCelsius = x))" Min="0.1" Max="5" />
+                    </MudGrid>
+                </MudExpansionPanel>
+            }
+            @if (Show("repeat command quiet identical")) {
+                <MudExpansionPanel Text="Repeat quiet" Expanded="@IsSettingsSearchActive">
+                    <MudGrid Spacing="2">
+                        <SettingSwitch Label="Repeat quiet" Value="_repeatCommandGuardEnabled" ValueChanged="@(v => SetDirty(v, x => _repeatCommandGuardEnabled = x))" Help="Wait before sending the same number again." />
+                        <SettingInt Label="Min wait" Unit="s" Value="_repeatCommandMinimumWaitSeconds" ValueChanged="@(v => SetDirty(v, x => _repeatCommandMinimumWaitSeconds = x))" Min="0" Max="1800" />
+                        <SettingInt Label="Pressure extra" Unit="s" Value="_repeatCommandPressureExtraSeconds" ValueChanged="@(v => SetDirty(v, x => _repeatCommandPressureExtraSeconds = x))" Min="0" Max="3600" />
+                        <SettingDouble Label="Safe band" Value="_repeatCommandSafetyBandCelsius" ValueChanged="@(v => SetDirty(v, x => _repeatCommandSafetyBandCelsius = x))" Min="0.1" Max="5" />
+                    </MudGrid>
+                </MudExpansionPanel>
+            }
+            @if (Show("setpoint stillness stable samples wall setpoint settle pause")) {
+                <MudExpansionPanel Text="Setpoint stillness" Expanded="@IsSettingsSearchActive">
+                    <MudGrid Spacing="2">
+                        <SettingSwitch Label="Setpoint stillness" Value="_setpointStillnessGuardEnabled" ValueChanged="@(v => SetDirty(v, x => _setpointStillnessGuardEnabled = x))" Help="Wait until Home Assistant reports the same wall setpoint a few times." />
+                        <SettingInt Label="Stillness touches" Value="_setpointStillnessTriggerTouches" ValueChanged="@(v => SetDirty(v, x => _setpointStillnessTriggerTouches = x))" Min="1" Max="20" Help="Repeated external changes needed before this guard holds." />
+                        <SettingInt Label="Stable samples" Value="_setpointStillnessRequiredSamples" ValueChanged="@(v => SetDirty(v, x => _setpointStillnessRequiredSamples = x))" Min="2" Max="20" Help="Matching real readings needed before a safe correction continues." />
+                        <SettingInt Label="Max hold" Unit="s" Value="_setpointStillnessMaxHoldSeconds" ValueChanged="@(v => SetDirty(v, x => _setpointStillnessMaxHoldSeconds = x))" Min="5" Max="3600" Help="Longest time to wait for the wall setpoint to stop moving." />
+                        <SettingDouble Label="Tolerance" Value="_setpointStillnessToleranceCelsius" ValueChanged="@(v => SetDirty(v, x => _setpointStillnessToleranceCelsius = x))" Min="0.01" Max="0.5" Step="0.01" Help="How close readings must be to count as the same setpoint." />
+                        <SettingDouble Label="Safe band" Value="_setpointStillnessSafetyBandCelsius" ValueChanged="@(v => SetDirty(v, x => _setpointStillnessSafetyBandCelsius = x))" Min="0.1" Max="5" Help="Warmth allowed before this guard stops waiting." />
+                    </MudGrid>
+                </MudExpansionPanel>
+            }
+            @if (Show("sensor rhythm beat interval")) {
+                <MudExpansionPanel Text="Sensor rhythm" Expanded="@IsSettingsSearchActive">
+                    <MudGrid Spacing="2">
+                        <SettingSwitch Label="Sensor rhythm" Value="_sensorRhythmGuardEnabled" ValueChanged="@(v => SetDirty(v, x => _sensorRhythmGuardEnabled = x))" Help="Time nudges to the normal reading beat." />
+                        <SettingInt Label="Samples" Value="_sensorRhythmMinimumSamples" ValueChanged="@(v => SetDirty(v, x => _sensorRhythmMinimumSamples = x))" Min="2" Max="60" />
+                        <SettingInt Label="Window" Unit="min" Value="_sensorRhythmWindowMinutes" ValueChanged="@(v => SetDirty(v, x => _sensorRhythmWindowMinutes = x))" Min="5" Max="1440" />
+                        <SettingInt Label="Wiggle" Unit="s" Value="_sensorRhythmJitterSeconds" ValueChanged="@(v => SetDirty(v, x => _sensorRhythmJitterSeconds = x))" Min="0" Max="300" />
+                        <SettingDouble Label="Safe band" Value="_sensorRhythmSafetyBandCelsius" ValueChanged="@(v => SetDirty(v, x => _sensorRhythmSafetyBandCelsius = x))" Min="0.1" Max="5" />
+                    </MudGrid>
+                </MudExpansionPanel>
+            }
+            @if (Show("hvac alibi action transition idle cooling natural")) {
+                <MudExpansionPanel Text="HVAC alibi" Expanded="@IsSettingsSearchActive">
+                    <MudGrid Spacing="2">
+                        <SettingSwitch Label="HVAC alibi" Value="_hvacActionAlibiEnabled" ValueChanged="@(v => SetDirty(v, x => _hvacActionAlibiEnabled = x))" Help="Wait for a real HVAC action change before a safe correction." />
+                        <SettingInt Label="Alibi touches" Value="_hvacActionAlibiTriggerTouches" ValueChanged="@(v => SetDirty(v, x => _hvacActionAlibiTriggerTouches = x))" Min="1" Max="20" />
+                        <SettingInt Label="Transition window" Unit="s" Value="_hvacActionAlibiTransitionWindowSeconds" ValueChanged="@(v => SetDirty(v, x => _hvacActionAlibiTransitionWindowSeconds = x))" Min="5" Max="1800" />
+                        <SettingInt Label="Max hold" Unit="min" Value="_hvacActionAlibiMaxHoldMinutes" ValueChanged="@(v => SetDirty(v, x => _hvacActionAlibiMaxHoldMinutes = x))" Min="1" Max="240" />
+                        <SettingDouble Label="Safe band" Value="_hvacActionAlibiSafetyBandCelsius" ValueChanged="@(v => SetDirty(v, x => _hvacActionAlibiSafetyBandCelsius = x))" Min="0.1" Max="5" />
+                    </MudGrid>
+                </MudExpansionPanel>
+            }
+            @if (Show("telemetry alibi weather sensor beat alectra usage house update cover")) {
+                <MudExpansionPanel Text="Telemetry alibi" Expanded="@IsSettingsSearchActive">
+                    <MudGrid Spacing="2">
+                        <SettingSwitch Label="Telemetry alibi" Value="_telemetryAlibiEnabled" ValueChanged="@(v => SetDirty(v, x => _telemetryAlibiEnabled = x))" Help="Wait for a normal house telemetry update before a safe correction." />
+                        <SettingInt Label="Alibi touches" Value="_telemetryAlibiTriggerTouches" ValueChanged="@(v => SetDirty(v, x => _telemetryAlibiTriggerTouches = x))" Min="1" Max="20" />
+                        <SettingInt Label="Quiet hold" Unit="s" Value="_telemetryAlibiMinimumHoldSeconds" ValueChanged="@(v => SetDirty(v, x => _telemetryAlibiMinimumHoldSeconds = x))" Min="0" Max="1800" />
+                        <SettingInt Label="Max wait" Unit="min" Value="_telemetryAlibiMaxHoldMinutes" ValueChanged="@(v => SetDirty(v, x => _telemetryAlibiMaxHoldMinutes = x))" Min="1" Max="240" />
+                        <SettingDouble Label="Safe band" Value="_telemetryAlibiSafetyBandCelsius" ValueChanged="@(v => SetDirty(v, x => _telemetryAlibiSafetyBandCelsius = x))" Min="0.1" Max="5" />
+                        <SettingSwitch Label="Use weather" Value="_telemetryAlibiUseWeather" ValueChanged="@(v => SetDirty(v, x => _telemetryAlibiUseWeather = x))" Help="Let weather updates count as cover." />
+                        <SettingSwitch Label="Use sensor beat" Value="_telemetryAlibiUseSensorBeat" ValueChanged="@(v => SetDirty(v, x => _telemetryAlibiUseSensorBeat = x))" Help="Let normal Home Assistant readings count as cover." />
+                        <SettingSwitch Label="Use Alectra" Value="_telemetryAlibiUsePeakPower" ValueChanged="@(v => SetDirty(v, x => _telemetryAlibiUsePeakPower = x))" Help="Let Alectra usage updates count as cover." />
+                    </MudGrid>
+                </MudExpansionPanel>
+            }
+            @if (Show("cooling runway hvac action")) {
+                <MudExpansionPanel Text="Cooling runway" Expanded="@IsSettingsSearchActive">
+                    <MudGrid Spacing="2">
+                        <SettingSwitch Label="Cooling runway" Value="_coolingRunwayGuardEnabled" ValueChanged="@(v => SetDirty(v, x => _coolingRunwayGuardEnabled = x))" Help="Give the AC time to work after cooling starts." />
+                        <SettingInt Label="Min wait" Unit="s" Value="_coolingRunwayMinimumSeconds" ValueChanged="@(v => SetDirty(v, x => _coolingRunwayMinimumSeconds = x))" Min="0" Max="1800" />
+                        <SettingInt Label="Pressure extra" Unit="s" Value="_coolingRunwayPressureExtraSeconds" ValueChanged="@(v => SetDirty(v, x => _coolingRunwayPressureExtraSeconds = x))" Min="0" Max="3600" />
+                        <SettingDouble Label="Safe band" Value="_coolingRunwaySafetyBandCelsius" ValueChanged="@(v => SetDirty(v, x => _coolingRunwaySafetyBandCelsius = x))" Min="0.1" Max="5" />
+                    </MudGrid>
+                </MudExpansionPanel>
+            }
+            @if (Show("room trend warming cooling")) {
+                <MudExpansionPanel Text="Room trend guard" Expanded="@IsSettingsSearchActive">
+                    <MudGrid Spacing="2">
+                        <SettingSwitch Label="Watch room trend" Value="_roomTrendGuardEnabled" ValueChanged="@(v => SetDirty(v, x => _roomTrendGuardEnabled = x))" Help="Keep observing when the room is already cooling." />
+                        <SettingInt Label="Window" Unit="min" Value="_roomTrendWindowMinutes" ValueChanged="@(v => SetDirty(v, x => _roomTrendWindowMinutes = x))" Min="2" Max="240" />
+                        <SettingDouble Label="Stable change" Value="_roomTrendStableToleranceCelsius" ValueChanged="@(v => SetDirty(v, x => _roomTrendStableToleranceCelsius = x))" Min="0.05" Max="2" Step="0.05" />
+                        <SettingInt Label="Hold" Unit="min" Value="_roomTrendHoldMinutes" ValueChanged="@(v => SetDirty(v, x => _roomTrendHoldMinutes = x))" Min="1" Max="120" />
+                    </MudGrid>
+                </MudExpansionPanel>
+            }
+            @if (Show("thermal momentum cooling rate")) {
+                <MudExpansionPanel Text="Thermal momentum" Expanded="@IsSettingsSearchActive">
+                    <MudGrid Spacing="2">
+                        <SettingSwitch Label="Use cooling momentum" Value="_thermalMomentumGuardEnabled" ValueChanged="@(v => SetDirty(v, x => _thermalMomentumGuardEnabled = x))" Help="Wait when the room is cooling fast toward target." />
+                        <SettingDouble Label="Cooling rate" Unit="C/h" Value="_thermalMomentumMinimumCoolingRateCelsiusPerHour" ValueChanged="@(v => SetDirty(v, x => _thermalMomentumMinimumCoolingRateCelsiusPerHour = x))" Min="0.1" Max="5" />
+                        <SettingInt Label="Look-ahead" Unit="min" Value="_thermalMomentumLookAheadMinutes" ValueChanged="@(v => SetDirty(v, x => _thermalMomentumLookAheadMinutes = x))" Min="5" Max="240" />
+                        <SettingInt Label="Hold" Unit="min" Value="_thermalMomentumHoldMinutes" ValueChanged="@(v => SetDirty(v, x => _thermalMomentumHoldMinutes = x))" Min="1" Max="120" />
+                    </MudGrid>
+                </MudExpansionPanel>
+            }
+        </MudExpansionPanels>
+    </SectionCard>
+
+    @* ───────────── Comfort ───────────── *@
+    <SectionCard Title="Comfort" Help="Fan saver, upstairs comfort, and presence.">
+        <MudExpansionPanels MultiExpansion="true" Class="setting-panels">
+            @if (Show("fan energy saver mode")) {
+                <MudExpansionPanel Text="Fan energy saver" Expanded="@IsSettingsSearchActive">
+                    <MudGrid Spacing="2">
+                        <SettingSwitch Label="Adjust fan near target" Value="_fanEnergySaverEnabled" ValueChanged="@(v => SetDirty(v, x => _fanEnergySaverEnabled = x))" Help="Move the fan to a saver mode when near target." />
+                        <SettingDouble Label="Near-target" Value="_fanEnergySaverThresholdCelsius" ValueChanged="@(v => SetDirty(v, x => _fanEnergySaverThresholdCelsius = x))" Min="0.1" Max="5" />
+                        <MudItem xs="12" sm="6">
+                            <MudTextField T="string" Value="_fanEnergySaverMode" ValueChanged="@(v => SetDirty(v, x => _fanEnergySaverMode = x))" Label="Fan saver mode" Placeholder="auto" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                        </MudItem>
+                    </MudGrid>
+                </MudExpansionPanel>
+            }
+            @if (Show("alectra peak power saver on peak price kw resource saving chill")) {
+                <MudExpansionPanel Text="Alectra Peak Power Saver" Expanded="@IsSettingsSearchActive">
+                    <MudGrid Spacing="2">
+                        <SettingSwitch Label="Peak power saver" Value="_peakPowerSaverEnabled" ValueChanged="@(v => SetDirty(v, x => _peakPowerSaverEnabled = x))" Help="Make safe cooling more chill when Alectra says power is expensive or high." />
+                        <SettingSwitch Label="Use on-peak" Value="_peakPowerSaverOnPeakEnabled" ValueChanged="@(v => SetDirty(v, x => _peakPowerSaverOnPeakEnabled = x))" Help="Treat Alectra On-peak as a saver trigger." />
+                        <SettingSwitch Label="Use high kW" Value="_peakPowerSaverHighPowerEnabled" ValueChanged="@(v => SetDirty(v, x => _peakPowerSaverHighPowerEnabled = x))" Help="Treat high current power as a saver trigger." />
+                        <SettingDouble Label="Power threshold" Unit="kW" Value="_peakPowerSaverPowerThresholdKilowatts" ValueChanged="@(v => SetDirty(v, x => _peakPowerSaverPowerThresholdKilowatts = x))" Min="0.1" Max="50" />
+                        <SettingDouble Label="Price threshold" Unit="c/kWh" Value="_peakPowerSaverPriceThresholdCentsPerKwh" ValueChanged="@(v => SetDirty(v, x => _peakPowerSaverPriceThresholdCentsPerKwh = x))" Min="0" Max="200" />
+                        <SettingInt Label="Saver hold" Unit="min" Value="_peakPowerSaverHoldMinutes" ValueChanged="@(v => SetDirty(v, x => _peakPowerSaverHoldMinutes = x))" Min="1" Max="240" />
+                        <SettingInt Label="Refresh" Unit="s" Value="_peakPowerSaverRefreshSeconds" ValueChanged="@(v => SetDirty(v, x => _peakPowerSaverRefreshSeconds = x))" Min="30" Max="3600" />
+                        <SettingDouble Label="Safe band" Value="_peakPowerSaverSafetyBandCelsius" ValueChanged="@(v => SetDirty(v, x => _peakPowerSaverSafetyBandCelsius = x))" Min="0.1" Max="10" />
+                        <SettingSwitch Label="Saver fan mode" Value="_peakPowerSaverFanSaverEnabled" ValueChanged="@(v => SetDirty(v, x => _peakPowerSaverFanSaverEnabled = x))" Help="Set the fan to the saver mode while peak saver is active and the room is still safe." />
+                        <MudItem xs="12" sm="6">
+                            <MudTextField T="string" Value="_peakPowerSaverFanMode" ValueChanged="@(v => SetDirty(v, x => _peakPowerSaverFanMode = x))" Label="Peak fan mode" Placeholder="auto" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                        </MudItem>
+                    </MudGrid>
+                </MudExpansionPanel>
+            }
+            @if (Show("front door person detector kill switch guard post thermostat off visitor porch entry")) {
+                <MudExpansionPanel Text="Front-door kill switch" Expanded="@IsSettingsSearchActive">
+                    <MudGrid Spacing="2">
+                        <SettingSwitch Label="Front-door guard" Value="_frontDoorKillSwitchEnabled" ValueChanged="@(v => SetDirty(v, x => _frontDoorKillSwitchEnabled = x))" Help="Pause the defender if a real front-door person detector trips." />
+                        <SettingSwitch Label="Turn thermostat off" Value="_frontDoorKillSwitchTurnsThermostatOff" ValueChanged="@(v => SetDirty(v, x => _frontDoorKillSwitchTurnsThermostatOff = x))" Help="Send thermostat OFF when the front-door guard fires." />
+                        <SettingInt Label="Guard hold" Unit="min" Value="_frontDoorKillSwitchHoldMinutes" ValueChanged="@(v => SetDirty(v, x => _frontDoorKillSwitchHoldMinutes = x))" Min="1" Max="240" />
+                        <SettingInt Label="Detector refresh" Unit="s" Value="_frontDoorKillSwitchRefreshSeconds" ValueChanged="@(v => SetDirty(v, x => _frontDoorKillSwitchRefreshSeconds = x))" Min="2" Max="300" />
+                        <MudItem xs="12">
+                            <MudTextField T="string" Value="_frontDoorPersonEntityIds" ValueChanged="@(v => SetDirty(v, x => _frontDoorPersonEntityIds = x))"
+                                          Label="Front-door person entity IDs"
+                                          Placeholder="binary_sensor.front_door_person, binary_sensor.porch_person"
+                                          HelperText="Comma-separated. Leave blank to auto-discover likely front-door person sensors."
+                                          Variant="Variant.Outlined" Margin="Margin.Dense" />
+                        </MudItem>
+                    </MudGrid>
+                </MudExpansionPanel>
+            }
+            @if (Show("upstairs comfort temperature sensors boost")) {
+                <MudExpansionPanel Text="Upstairs comfort" Expanded="@IsSettingsSearchActive">
+                    <MudGrid Spacing="2">
+                        <SettingSwitch Label="Protect upstairs comfort" Value="_upstairsComfortEnabled" ValueChanged="@(v => SetDirty(v, x => _upstairsComfortEnabled = x))" Help="Cool harder when upstairs gets hot." />
+                        <MudItem xs="12">
+                            <MudTextField T="string" Value="_upstairsTemperatureEntityIds" ValueChanged="@(v => SetDirty(v, x => _upstairsTemperatureEntityIds = x))" Label="Upstairs temperature entity IDs" Placeholder="sensor.upstairs_temperature, sensor.primary_bedroom_temperature" HelperText="Comma-separated. Leave blank to auto-discover." Variant="Variant.Outlined" Margin="Margin.Dense" />
+                        </MudItem>
+                        <SettingDouble Label="Max upstairs" Value="_upstairsMaxComfortCelsius" ValueChanged="@(v => SetDirty(v, x => _upstairsMaxComfortCelsius = x))" Min="15" Max="35" />
+                        <SettingDouble Label="Comfort target" Value="_upstairsComfortTargetCelsius" ValueChanged="@(v => SetDirty(v, x => _upstairsComfortTargetCelsius = x))" Min="10" Max="30" />
+                        <SettingDouble Label="Extra boost" Value="_upstairsComfortBoostCelsius" ValueChanged="@(v => SetDirty(v, x => _upstairsComfortBoostCelsius = x))" Min="0" Max="5" />
+                    </MudGrid>
+                </MudExpansionPanel>
+            }
+            @if (Show("home presence away person device tracker")) {
+                <MudExpansionPanel Text="Home presence" Expanded="@IsSettingsSearchActive">
+                    <MudGrid Spacing="2">
+                        <SettingSwitch Label="Only prioritize upstairs when home" Value="_homePresenceRequired" ValueChanged="@(v => SetDirty(v, x => _homePresenceRequired = x))" Help="Require a present person before upstairs priority." />
+                        <MudItem xs="12">
+                            <MudTextField T="string" Value="_presenceEntityIds" ValueChanged="@(v => SetDirty(v, x => _presenceEntityIds = x))" Label="Presence entity IDs" Placeholder="person.me, device_tracker.phone" HelperText="Comma-separated. Leave blank to auto-discover." Variant="Variant.Outlined" Margin="Margin.Dense" />
+                        </MudItem>
+                    </MudGrid>
+                </MudExpansionPanel>
+            }
+        </MudExpansionPanels>
+    </SectionCard>
+
+    @* ───────────── Schedule editor ───────────── *@
+    <SectionCard Title="Custom schedule"
+                 Subtitle="Temperature rules"
+                 Help="Add target-temperature rules for days and times. Each rule has its own weather gate.">
+        <Actions>
+            <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">@ScheduleResultText</MudChip>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" OnClick="AddSchedule" StartIcon="@Icons.Material.Filled.Add">Add rule</MudButton>
+        </Actions>
+        <ChildContent>
+            <MudTextField @bind-Value="_scheduleSearch" Immediate="true" Clearable="true" Margin="Margin.Dense"
+                          Placeholder="Search schedule rules" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Variant="Variant.Outlined" Class="mb-2" />
+
+            @if (!FilteredSchedule.Any())
+            {
+                <MudAlert Severity="Severity.Normal" Variant="Variant.Outlined">@(_schedule.Count == 0 ? "No rules yet. Add one to start a custom schedule." : "No rule matches that search.")</MudAlert>
+            }
+
+            <MudStack Spacing="2">
+                @foreach (var entry in FilteredSchedule)
+                {
+                    <MudPaper Class="schedule-card" Elevation="0" @key="entry.Id">
+                        <MudGrid Spacing="2" Class="align-center">
+                            <MudItem xs="12" sm="6">
+                                <MudTextField T="string" Value="entry.Name" ValueChanged="@(v => UpdateSchedule(entry, e => e.Name = v))" Label="Name" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                            </MudItem>
+                            <MudItem xs="6" sm="3">
+                                <MudSwitch T="bool" Value="entry.Enabled" ValueChanged="@(v => UpdateSchedule(entry, e => e.Enabled = v))" Color="Color.Success" Label="On" />
+                            </MudItem>
+                            <MudItem xs="6" sm="3" Class="d-flex justify-end">
+                                <MudButton Variant="Variant.Text" Color="Color.Error" OnClick="@(() => RemoveSchedule(entry))" StartIcon="@Icons.Material.Filled.Delete">Remove</MudButton>
+                            </MudItem>
+
+                            <MudItem xs="12">
+                                <div class="day-button-row">
+                                    @foreach (var day in Days)
+                                    {
+                                        <MudButton Size="Size.Small" Variant="@DayVariant(entry, day)" Color="@DayColor(entry, day)" OnClick="@(() => ToggleDay(entry, day))">@day</MudButton>
+                                    }
+                                </div>
+                            </MudItem>
+
+                            <MudItem xs="6" sm="3">
+                                <MudTextField T="string" Value="entry.StartTime" ValueChanged="@(v => UpdateSchedule(entry, e => e.StartTime = v))" Label="Start" InputType="InputType.Time" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                            </MudItem>
+                            <MudItem xs="6" sm="3">
+                                <MudTextField T="string" Value="entry.EndTime" ValueChanged="@(v => UpdateSchedule(entry, e => e.EndTime = v))" Label="End" InputType="InputType.Time" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                            </MudItem>
+                            <MudItem xs="6" sm="3">
+                                <MudNumericField T="double" Value="entry.TargetTemperatureCelsius" ValueChanged="@(v => UpdateSchedule(entry, e => e.TargetTemperatureCelsius = v))" Label="Target" Variant="Variant.Outlined" Margin="Margin.Dense" Min="10" Max="35" Step="0.1" Adornment="Adornment.End" AdornmentText="C" />
+                            </MudItem>
+                            <MudItem xs="6" sm="3">
+                                <MudSelect T="string" Value="entry.WeatherActivationMode" ValueChanged="@(v => UpdateSchedule(entry, e => e.WeatherActivationMode = v))" Label="Weather rule" Variant="Variant.Outlined" Margin="Margin.Dense">
+                                    @foreach (var option in ScheduleWeatherOptions)
+                                    {
+                                        <MudSelectItem T="string" Value="@option.Value">@option.Label</MudSelectItem>
+                                    }
+                                </MudSelect>
+                            </MudItem>
+
+                            <MudItem xs="12">
+                                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">@Summary(entry)</MudAlert>
+                            </MudItem>
+                        </MudGrid>
+                    </MudPaper>
+                }
+            </MudStack>
+        </ChildContent>
+    </SectionCard>
+
+    <div class="save-bar">
+        <MudText Typo="Typo.caption" Class="helper-text">@StatusText</MudText>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveSettings" StartIcon="@Icons.Material.Filled.Save">Save settings</MudButton>
+    </div>
+</MudStack>
+
+@code {
+    private static readonly string[] Days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+    private static readonly (string Value, string Label)[] WeatherOptions =
+    [
+        ("always", "Always active"),
+        ("room-above-outdoor", "Only when room is above outdoor temp"),
+        ("room-below-outdoor", "Only when room is below outdoor temp"),
+        ("outdoor-above-target", "Only when outdoor is above target"),
+        ("outdoor-below-target", "Only when outdoor is below target")
+    ];
+    private static readonly (string Value, string Label)[] ScheduleWeatherOptions =
+    [
+        ("always", "Always"),
+        ("room-above-outdoor", "Room above outdoor"),
+        ("room-below-outdoor", "Room below outdoor"),
+        ("outdoor-above-target", "Outdoor above target"),
+        ("outdoor-below-target", "Outdoor below target")
+    ];
+    private static readonly TimeZoneInfo TorontoTimeZone = ResolveTorontoTimeZone();
+
+    private string _settingsSearch = "";
+    private string _registrationCode = "";
+    private string _haTokenInput = "";
+
+    private bool HaEnvTokenConfigured => !string.IsNullOrWhiteSpace(HaOptions.CurrentValue.AccessToken);
+
+    private string HaTokenSubtitle => HaEnvTokenConfigured
+        ? "Token from environment"
+        : TokenStore.HasToken ? "Token from website" : "No token — enter one";
+
+    private void SaveHaToken()
+    {
+        if (string.IsNullOrWhiteSpace(_haTokenInput))
+        {
+            Snackbar.Add("Paste a token first.", Severity.Warning);
+            return;
+        }
+
+        TokenStore.SetToken(_haTokenInput);
+        _haTokenInput = "";
+        Snackbar.Add("Home Assistant token saved. The next defender cycle will use it.", Severity.Success);
+    }
+
+    private void ClearHaToken()
+    {
+        TokenStore.SetToken(null);
+        Snackbar.Add("Website token cleared.", Severity.Info);
+    }
+
+    private bool _scheduleEnabled;
+    private bool _websiteCommandDebounceEnabled;
+    private bool _nightShutdownEnabled;
+    private string _nightShutdownStartTime = "01:00";
+    private string _nightShutdownEndTime = "08:00";
+    private double _nightShutdownOutdoorBelowCelsius = 24.0;
+    private int _coolingStepMinimumGapSeconds = 60;
+    private double _nightMinimumSetPointCelsius = 23.0;
+    private int _nightCoolingBudgetMinutes = 90;
+    private bool _electricityBudgetEnabled;
+    private double _electricityMonthlyBudgetDollars = 150.0;
+    private double _electricityBudgetAggressiveness = 0.5;
+    private double _electricityBudgetMaxSetpointOffsetCelsius = 1.5;
+    private double _electricityBudgetSafetyMaxCelsius = 26.0;
+    private string _electricityBudgetBasis = "ac-estimate";
+    private bool _coolingRestEnabled = true;
+    private int _coolingRunMaxMinutes = 180;
+    private int _coolingRestMinutes = 30;
+    private bool _standDownParkEnabled = true;
+    private double _standDownParkSetPointCelsius = 28.0;
+    private bool _autoBrotherMadEnabled = true;
+    private int _autoBrotherMadTouches = 3;
+    private int _autoBrotherMadWindowMinutes = 10;
+    private double _autoBrotherMadBigRaiseCelsius = 2.0;
+    private bool _peaceOfferingEnabled = true;
+    private double _peaceOfferingStepCelsius = 0.5;
+    private int _peaceOfferingHoldMinutes = 20;
+    private string _weatherActivationMode = "always";
+    private int _baseCooldownSeconds = 45;
+    private int _maxCooldownSeconds = 600;
+    private int _touchFrequencyWindowMinutes = 30;
+    private bool _coolModeRestoreDelayEnabled = true;
+    private int _coolModeRestoreMinimumDelaySeconds = 8;
+    private int _coolModeRestoreMaximumDelaySeconds = 60;
+    private double _coolModeRestoreComfortBandCelsius = 0.6;
+    private bool _conflictQuietModeEnabled = true;
+    private int _conflictQuietTouchThreshold = 4;
+    private int _conflictQuietMinutes = 35;
+    private double _conflictQuietComfortBandCelsius = 1.2;
+    private bool _tugOfWarTruceEnabled = true;
+    private int _tugOfWarTruceMinimumFlips = 2;
+    private int _tugOfWarTruceWindowMinutes = 12;
+    private int _tugOfWarTruceHoldMinutes = 20;
+    private double _tugOfWarTruceSafetyBandCelsius = 1.0;
+    private bool _wallSettlingGuardEnabled = true;
+    private int _wallSettlingMinimumTouches = 2;
+    private int _wallSettlingWindowMinutes = 10;
+    private int _wallSettlingBaseSeconds = 45;
+    private int _wallSettlingPressureExtraSeconds = 120;
+    private double _wallSettlingSafetyBandCelsius = 1.0;
+    private bool _naturalRecoveryEnabled = true;
+    private bool _adaptiveQuietnessEnabled = true;
+    private int _adaptiveQuietTouchThreshold = 2;
+    private int _maximumAdaptiveDelaySeconds = 900;
+    private double _minimumAdaptiveStepCelsius = 0.5;
+    private int _maximumAdaptiveHoldChancePercent = 75;
+    private int _maximumAdaptiveCommandGapSeconds = 180;
+    private int _minimumNaturalDelaySeconds = 20;
+    private int _maximumNaturalDelaySeconds = 180;
+    private double _naturalStepCelsius = 1.0;
+    private int _naturalHoldChancePercent = 25;
+    private int _maxNaturalHolds = 2;
+    private int _minimumCommandGapSeconds = 30;
+    private double _naturalSafetyOverrideCelsius = 2.0;
+    private bool _naturalWalkbackEnabled = true;
+    private int _naturalWalkbackTriggerTouches = 2;
+    private double _naturalWalkbackStepCelsius = 0.5;
+    private double _naturalWalkbackJitterCelsius = 0.1;
+    private double _naturalWalkbackSafetyBandCelsius = 1.0;
+    private bool _touchSignatureEnabled = true;
+    private int _touchSignatureTriggerTouches = 2;
+    private int _touchSignatureRetentionMinutes = 90;
+    private double _touchSignatureMinimumStepCelsius = 0.3;
+    private double _touchSignatureMaximumStepCelsius = 1.0;
+    private double _touchSignatureSafetyBandCelsius = 1.0;
+    private bool _humanNudgeEnabled = true;
+    private int _humanNudgeTriggerTouches = 2;
+    private double _humanNudgeStepCelsius = 0.5;
+    private double _humanNudgeSafetyBandCelsius = 1.0;
+    private bool _visibilityGuardEnabled = true;
+    private int _visibilityGuardTriggerNotices = 1;
+    private int _visibilityGuardNoticeWindowMinutes = 45;
+    private int _visibilityGuardAfterCommandSeconds = 180;
+    private int _visibilityGuardMinimumHoldMinutes = 8;
+    private int _visibilityGuardMaximumHoldMinutes = 35;
+    private double _visibilityGuardSafetyBandCelsius = 1.0;
+    private bool _routineTimingEnabled = true;
+    private int _routineTimingTriggerTouches = 2;
+    private int _routineTimingIntervalMinutes = 5;
+    private int _routineTimingJitterMinutes = 2;
+    private int _routineTimingMaxDelayMinutes = 12;
+    private double _routineTimingSafetyBandCelsius = 1.0;
+    private bool _comfortBudgetEnabled = true;
+    private int _comfortBudgetWindowMinutes = 30;
+    private int _comfortBudgetMaxCommands = 3;
+    private double _comfortBudgetSafetyBandCelsius = 1.2;
+    private bool _commandCamouflageEnabled = true;
+    private int _commandCamouflageMinimumGapSeconds = 180;
+    private int _commandCamouflagePressureExtraSeconds = 360;
+    private double _commandCamouflageSafetyBandCelsius = 1.0;
+    private bool _stealthGovernorEnabled = true;
+    private int _stealthGovernorTriggerScore = 65;
+    private int _stealthGovernorMinimumHoldMinutes = 5;
+    private int _stealthGovernorMaximumHoldMinutes = 25;
+    private double _stealthGovernorSafetyBandCelsius = 1.2;
+    private bool _naturalCadenceEnabled = true;
+    private int _naturalCadenceTriggerTouches = 2;
+    private int _naturalCadenceMinimumMinutes = 3;
+    private int _naturalCadenceMaximumMinutes = 18;
+    private int _naturalCadenceJitterMinutes = 4;
+    private double _naturalCadenceSafetyBandCelsius = 1.0;
+    private bool _naturalChangePlannerEnabled = true;
+    private int _naturalChangePlannerTriggerTouches = 3;
+    private int _naturalChangePlannerMinimumMinutes = 8;
+    private int _naturalChangePlannerMaximumMinutes = 45;
+    private int _naturalChangePlannerJitterMinutes = 6;
+    private double _naturalChangePlannerSafetyBandCelsius = 1.1;
+    private bool _naturalChangePlannerPreferWeatherSlots = true;
+    private bool _naturalChangePlannerPreferSensorBeat = true;
+    private bool _comfortEnvelopeEnabled = true;
+    private int _comfortEnvelopeTriggerTouches = 2;
+    private int _comfortEnvelopeHoldMinutes = 18;
+    private double _comfortEnvelopeMaxOffsetCelsius = 0.8;
+    private double _comfortEnvelopeSafetyBandCelsius = 1.0;
+    private bool _comfortCompromiseEnabled = true;
+    private int _comfortCompromiseTriggerTouches = 2;
+    private int _comfortCompromiseHoldMinutes = 20;
+    private int _comfortCompromiseDecayMinutes = 30;
+    private double _comfortCompromiseMaxOffsetCelsius = 1.0;
+    private double _comfortCompromiseSafetyBandCelsius = 1.0;
+    private bool _comfortMemoryEnabled = true;
+    private int _comfortMemoryLearningTouches = 2;
+    private int _comfortMemoryRetentionHours = 24;
+    private double _comfortMemoryMaxOffsetCelsius = 0.6;
+    private double _comfortMemorySafetyBandCelsius = 0.8;
+    private bool _manualComfortGraceEnabled = true;
+    private int _manualComfortGraceMinutes = 20;
+    private double _manualComfortGraceBandCelsius = 0.8;
+    private bool _touchIntentEnabled = true;
+    private int _touchIntentMinimumTouches = 2;
+    private int _touchIntentWindowMinutes = 90;
+    private double _touchIntentNetWarmThresholdCelsius = 0.8;
+    private int _touchIntentExtraGraceMinutes = 25;
+    private double _touchIntentSafetyBandCelsius = 1.0;
+    private bool _coolerIntentFastLaneEnabled = true;
+    private int _coolerIntentMinimumTouches = 2;
+    private int _coolerIntentWindowMinutes = 90;
+    private int _coolerIntentHoldMinutes = 20;
+    private double _coolerIntentNetCoolThresholdCelsius = 0.8;
+    private double _coolerIntentSafetyBandCelsius = 2.0;
+    private bool _setpointEchoGuardEnabled = true;
+    private int _setpointEchoGraceSeconds = 30;
+    private double _setpointEchoSafetyBandCelsius = 1.0;
+    private bool _repeatCommandGuardEnabled = true;
+    private int _repeatCommandMinimumWaitSeconds = 90;
+    private int _repeatCommandPressureExtraSeconds = 240;
+    private double _repeatCommandSafetyBandCelsius = 1.0;
+    private bool _setpointStillnessGuardEnabled = true;
+    private int _setpointStillnessTriggerTouches = 2;
+    private int _setpointStillnessRequiredSamples = 3;
+    private int _setpointStillnessMaxHoldSeconds = 180;
+    private double _setpointStillnessToleranceCelsius = 0.05;
+    private double _setpointStillnessSafetyBandCelsius = 1.0;
+    private bool _sensorRhythmGuardEnabled = true;
+    private int _sensorRhythmMinimumSamples = 3;
+    private int _sensorRhythmWindowMinutes = 120;
+    private int _sensorRhythmJitterSeconds = 25;
+    private double _sensorRhythmSafetyBandCelsius = 1.0;
+    private bool _hvacActionAlibiEnabled = true;
+    private int _hvacActionAlibiTriggerTouches = 2;
+    private int _hvacActionAlibiTransitionWindowSeconds = 90;
+    private int _hvacActionAlibiMaxHoldMinutes = 12;
+    private double _hvacActionAlibiSafetyBandCelsius = 1.0;
+    private bool _telemetryAlibiEnabled = true;
+    private int _telemetryAlibiTriggerTouches = 2;
+    private int _telemetryAlibiMinimumHoldSeconds = 90;
+    private int _telemetryAlibiMaxHoldMinutes = 10;
+    private double _telemetryAlibiSafetyBandCelsius = 1.0;
+    private bool _telemetryAlibiUseWeather = true;
+    private bool _telemetryAlibiUseSensorBeat = true;
+    private bool _telemetryAlibiUsePeakPower = true;
+    private bool _coolingRunwayGuardEnabled = true;
+    private int _coolingRunwayMinimumSeconds = 120;
+    private int _coolingRunwayPressureExtraSeconds = 240;
+    private double _coolingRunwaySafetyBandCelsius = 1.0;
+    private bool _roomTrendGuardEnabled = true;
+    private int _roomTrendWindowMinutes = 12;
+    private double _roomTrendStableToleranceCelsius = 0.2;
+    private int _roomTrendHoldMinutes = 8;
+    private bool _thermalMomentumGuardEnabled = true;
+    private double _thermalMomentumMinimumCoolingRateCelsiusPerHour = 0.4;
+    private int _thermalMomentumLookAheadMinutes = 45;
+    private int _thermalMomentumHoldMinutes = 6;
+    private bool _weatherDriftGuardEnabled = true;
+    private int _weatherDriftWindowMinutes = 45;
+    private double _weatherDriftMinimumChangeCelsius = 0.3;
+    private int _weatherDriftHoldMinutes = 7;
+    private double _weatherDriftSafetyBandCelsius = 1.0;
+    private bool _superDefenderModeEnabled = true;
+    private int _superDefenderRemoteChangeThreshold = 2;
+    private int _superDefenderWindowMinutes = 30;
+    private int _superDefenderHoldMinutes = 45;
+    private double _superDefenderSafetyBandCelsius = 1.5;
+    private bool _superDefenderBypassQuietTiming = true;
+    private bool _remoteSettlingGuardEnabled = true;
+    private int _remoteSettlingTriggerChanges = 2;
+    private int _remoteSettlingWindowMinutes = 30;
+    private int _remoteSettlingHoldMinutes = 12;
+    private double _remoteSettlingSafetyBandCelsius = 1.0;
+    private bool _enforcerModeEnabled;
+    private double _enforcerTargetTemperatureCelsius;
+    private bool _enforcerEnforceMode = true;
+    private bool _enforcerEnforceSetpoint = true;
+    private bool _enforcerStealthShaping = true;
+    private bool _enforcerRespectOwner = true;
+    private string _enforcerOwnerUserIds = "";
+    private int _enforcerDebounceSeconds = 8;
+    private int _enforcerCooldownSeconds = 30;
+    private int _enforcerRateWindowMinutes = 15;
+    private int _enforcerMaxAssertsPerWindow = 6;
+    private int _enforcerEscalateAfterOverrides = 3;
+    private int _enforcerBackoffBaseSeconds = 20;
+    private int _enforcerBackoffMaxSeconds = 300;
+    private bool _enforcerScheduleEnabled;
+    private string _enforcerStartTime = "00:00";
+    private string _enforcerEndTime = "23:59";
+    private bool _enforcerRequirePresence;
+    private bool _enforcerNotifyEnabled;
+    private bool _enforcerUseLearning = true;
+    private bool _fanEnergySaverEnabled;
+    private double _fanEnergySaverThresholdCelsius = 0.6;
+    private string _fanEnergySaverMode = "auto";
+    private bool _peakPowerSaverEnabled = true;
+    private bool _peakPowerSaverOnPeakEnabled = true;
+    private bool _peakPowerSaverHighPowerEnabled = true;
+    private double _peakPowerSaverPowerThresholdKilowatts = 2.5;
+    private double _peakPowerSaverPriceThresholdCentsPerKwh = 15.0;
+    private int _peakPowerSaverHoldMinutes = 20;
+    private int _peakPowerSaverRefreshSeconds = 120;
+    private double _peakPowerSaverSafetyBandCelsius = 1.0;
+    private bool _peakPowerSaverFanSaverEnabled = true;
+    private string _peakPowerSaverFanMode = "auto";
+    private bool _frontDoorKillSwitchEnabled = true;
+    private string _frontDoorPersonEntityIds = "";
+    private int _frontDoorKillSwitchHoldMinutes = 20;
+    private int _frontDoorKillSwitchRefreshSeconds = 5;
+    private bool _frontDoorKillSwitchTurnsThermostatOff = true;
+    private bool _upstairsComfortEnabled = true;
+    private string _upstairsTemperatureEntityIds = "";
+    private double _upstairsMaxComfortCelsius = 24.0;
+    private double _upstairsComfortTargetCelsius = 22.0;
+    private double _upstairsComfortBoostCelsius = 1.0;
+    private bool _homePresenceRequired;
+    private string _presenceEntityIds = "";
+    private readonly List<ScheduleEntry> _schedule = [];
+    private string _scheduleSearch = "";
+    private bool _dirty;
+    private string _settingsStatus = "";
+
+    private string StatusText => _dirty
+        ? "Unsaved changes"
+        : string.IsNullOrWhiteSpace(_settingsStatus) ? "No changes saved yet" : _settingsStatus;
+
+    private bool Show(string keywords) => MatchesSettingsSearch(_settingsSearch, keywords);
+
+    private bool IsSettingsSearchActive => !string.IsNullOrWhiteSpace(_settingsSearch);
+
+    private IEnumerable<ScheduleEntry> FilteredSchedule =>
+        _schedule.Where(entry => MatchesSettingsSearch(
+            _scheduleSearch,
+            entry.Name,
+            entry.Days,
+            entry.StartTime,
+            entry.EndTime,
+            $"{entry.TargetTemperatureCelsius:0.0}",
+            entry.WeatherActivationMode,
+            Summary(entry)));
+
+    private string ScheduleResultText => $"{FilteredSchedule.Count()}/{_schedule.Count} rules";
+
+    protected override void OnInitialized()
+    {
+        LoadFromSnapshot(StateStore.GetSnapshot());
+    }
+
+    private void SaveRegistrationCode()
+    {
+        if (string.IsNullOrWhiteSpace(_registrationCode) || _registrationCode.Trim().Length < 4)
+        {
+            Snackbar.Add("Enter a registration code of at least 4 characters.", Severity.Error);
+            return;
+        }
+
+        TwoFactorAuth.SetRegistrationCode(_registrationCode.Trim());
+        _registrationCode = "";
+        Snackbar.Add("Registration code saved. Share it with people you want to let sign up.", Severity.Success);
+    }
+
+    private void CloseSignups()
+    {
+        TwoFactorAuth.SetRegistrationCode(null);
+        _registrationCode = "";
+        Snackbar.Add("Sign-ups closed. Only existing accounts can sign in.", Severity.Success);
+    }
+
+    private void LoadFromSnapshot(DefenderSnapshot snapshot)
+    {
+        var settings = snapshot.Settings;
+        _scheduleEnabled = settings.ScheduleEnabled;
+        _websiteCommandDebounceEnabled = settings.WebsiteCommandDebounceEnabled;
+        _nightShutdownEnabled = settings.NightShutdownEnabled;
+        _nightShutdownStartTime = settings.NightShutdownStartTime;
+        _nightShutdownEndTime = settings.NightShutdownEndTime;
+        _nightShutdownOutdoorBelowCelsius = settings.NightShutdownOutdoorBelowCelsius;
+        _coolingStepMinimumGapSeconds = settings.CoolingStepMinimumGapSeconds;
+        _nightMinimumSetPointCelsius = settings.NightMinimumSetPointCelsius;
+        _nightCoolingBudgetMinutes = settings.NightCoolingBudgetMinutes;
+        _electricityBudgetEnabled = settings.ElectricityBudgetEnabled;
+        _electricityMonthlyBudgetDollars = settings.ElectricityMonthlyBudgetDollars;
+        _electricityBudgetAggressiveness = settings.ElectricityBudgetAggressiveness;
+        _electricityBudgetMaxSetpointOffsetCelsius = settings.ElectricityBudgetMaxSetpointOffsetCelsius;
+        _electricityBudgetSafetyMaxCelsius = settings.ElectricityBudgetSafetyMaxCelsius;
+        _electricityBudgetBasis = string.Equals(settings.ElectricityBudgetBasis, "all-in", StringComparison.OrdinalIgnoreCase) ? "all-in" : "ac-estimate";
+        _coolingRestEnabled = settings.CoolingRestEnabled;
+        _coolingRunMaxMinutes = settings.CoolingRunMaxMinutes;
+        _coolingRestMinutes = settings.CoolingRestMinutes;
+        _standDownParkEnabled = settings.StandDownParkEnabled;
+        _standDownParkSetPointCelsius = settings.StandDownParkSetPointCelsius;
+        _autoBrotherMadEnabled = settings.AutoBrotherMadEnabled;
+        _autoBrotherMadTouches = settings.AutoBrotherMadTouches;
+        _autoBrotherMadWindowMinutes = settings.AutoBrotherMadWindowMinutes;
+        _autoBrotherMadBigRaiseCelsius = settings.AutoBrotherMadBigRaiseCelsius;
+        _peaceOfferingEnabled = settings.PeaceOfferingEnabled;
+        _peaceOfferingStepCelsius = settings.PeaceOfferingStepCelsius;
+        _peaceOfferingHoldMinutes = settings.PeaceOfferingHoldMinutes;
+        _weatherActivationMode = settings.WeatherActivationMode;
+        _baseCooldownSeconds = settings.BaseCooldownSeconds;
+        _maxCooldownSeconds = settings.MaxCooldownSeconds;
+        _touchFrequencyWindowMinutes = settings.TouchFrequencyWindowMinutes;
+        _coolModeRestoreDelayEnabled = settings.CoolModeRestoreDelayEnabled;
+        _coolModeRestoreMinimumDelaySeconds = settings.CoolModeRestoreMinimumDelaySeconds;
+        _coolModeRestoreMaximumDelaySeconds = settings.CoolModeRestoreMaximumDelaySeconds;
+        _coolModeRestoreComfortBandCelsius = settings.CoolModeRestoreComfortBandCelsius;
+        _conflictQuietModeEnabled = settings.ConflictQuietModeEnabled;
+        _conflictQuietTouchThreshold = settings.ConflictQuietTouchThreshold;
+        _conflictQuietMinutes = settings.ConflictQuietMinutes;
+        _conflictQuietComfortBandCelsius = settings.ConflictQuietComfortBandCelsius;
+        _tugOfWarTruceEnabled = settings.TugOfWarTruceEnabled;
+        _tugOfWarTruceMinimumFlips = settings.TugOfWarTruceMinimumFlips;
+        _tugOfWarTruceWindowMinutes = settings.TugOfWarTruceWindowMinutes;
+        _tugOfWarTruceHoldMinutes = settings.TugOfWarTruceHoldMinutes;
+        _tugOfWarTruceSafetyBandCelsius = settings.TugOfWarTruceSafetyBandCelsius;
+        _wallSettlingGuardEnabled = settings.WallSettlingGuardEnabled;
+        _wallSettlingMinimumTouches = settings.WallSettlingMinimumTouches;
+        _wallSettlingWindowMinutes = settings.WallSettlingWindowMinutes;
+        _wallSettlingBaseSeconds = settings.WallSettlingBaseSeconds;
+        _wallSettlingPressureExtraSeconds = settings.WallSettlingPressureExtraSeconds;
+        _wallSettlingSafetyBandCelsius = settings.WallSettlingSafetyBandCelsius;
+        _naturalRecoveryEnabled = settings.NaturalRecoveryEnabled;
+        _adaptiveQuietnessEnabled = settings.AdaptiveQuietnessEnabled;
+        _adaptiveQuietTouchThreshold = settings.AdaptiveQuietTouchThreshold;
+        _maximumAdaptiveDelaySeconds = settings.MaximumAdaptiveDelaySeconds;
+        _minimumAdaptiveStepCelsius = settings.MinimumAdaptiveStepCelsius;
+        _maximumAdaptiveHoldChancePercent = settings.MaximumAdaptiveHoldChancePercent;
+        _maximumAdaptiveCommandGapSeconds = settings.MaximumAdaptiveCommandGapSeconds;
+        _minimumNaturalDelaySeconds = settings.MinimumNaturalDelaySeconds;
+        _maximumNaturalDelaySeconds = settings.MaximumNaturalDelaySeconds;
+        _naturalStepCelsius = settings.NaturalStepCelsius;
+        _naturalHoldChancePercent = settings.NaturalHoldChancePercent;
+        _maxNaturalHolds = settings.MaxNaturalHolds;
+        _minimumCommandGapSeconds = settings.MinimumCommandGapSeconds;
+        _naturalSafetyOverrideCelsius = settings.NaturalSafetyOverrideCelsius;
+        _naturalWalkbackEnabled = settings.NaturalWalkbackEnabled;
+        _naturalWalkbackTriggerTouches = settings.NaturalWalkbackTriggerTouches;
+        _naturalWalkbackStepCelsius = settings.NaturalWalkbackStepCelsius;
+        _naturalWalkbackJitterCelsius = settings.NaturalWalkbackJitterCelsius;
+        _naturalWalkbackSafetyBandCelsius = settings.NaturalWalkbackSafetyBandCelsius;
+        _touchSignatureEnabled = settings.TouchSignatureEnabled;
+        _touchSignatureTriggerTouches = settings.TouchSignatureTriggerTouches;
+        _touchSignatureRetentionMinutes = settings.TouchSignatureRetentionMinutes;
+        _touchSignatureMinimumStepCelsius = settings.TouchSignatureMinimumStepCelsius;
+        _touchSignatureMaximumStepCelsius = settings.TouchSignatureMaximumStepCelsius;
+        _touchSignatureSafetyBandCelsius = settings.TouchSignatureSafetyBandCelsius;
+        _humanNudgeEnabled = settings.HumanNudgeEnabled;
+        _humanNudgeTriggerTouches = settings.HumanNudgeTriggerTouches;
+        _humanNudgeStepCelsius = settings.HumanNudgeStepCelsius;
+        _humanNudgeSafetyBandCelsius = settings.HumanNudgeSafetyBandCelsius;
+        _visibilityGuardEnabled = settings.VisibilityGuardEnabled;
+        _visibilityGuardTriggerNotices = settings.VisibilityGuardTriggerNotices;
+        _visibilityGuardNoticeWindowMinutes = settings.VisibilityGuardNoticeWindowMinutes;
+        _visibilityGuardAfterCommandSeconds = settings.VisibilityGuardAfterCommandSeconds;
+        _visibilityGuardMinimumHoldMinutes = settings.VisibilityGuardMinimumHoldMinutes;
+        _visibilityGuardMaximumHoldMinutes = settings.VisibilityGuardMaximumHoldMinutes;
+        _visibilityGuardSafetyBandCelsius = settings.VisibilityGuardSafetyBandCelsius;
+        _routineTimingEnabled = settings.RoutineTimingEnabled;
+        _routineTimingTriggerTouches = settings.RoutineTimingTriggerTouches;
+        _routineTimingIntervalMinutes = settings.RoutineTimingIntervalMinutes;
+        _routineTimingJitterMinutes = settings.RoutineTimingJitterMinutes;
+        _routineTimingMaxDelayMinutes = settings.RoutineTimingMaxDelayMinutes;
+        _routineTimingSafetyBandCelsius = settings.RoutineTimingSafetyBandCelsius;
+        _comfortBudgetEnabled = settings.ComfortBudgetEnabled;
+        _comfortBudgetWindowMinutes = settings.ComfortBudgetWindowMinutes;
+        _comfortBudgetMaxCommands = settings.ComfortBudgetMaxCommands;
+        _comfortBudgetSafetyBandCelsius = settings.ComfortBudgetSafetyBandCelsius;
+        _commandCamouflageEnabled = settings.CommandCamouflageEnabled;
+        _commandCamouflageMinimumGapSeconds = settings.CommandCamouflageMinimumGapSeconds;
+        _commandCamouflagePressureExtraSeconds = settings.CommandCamouflagePressureExtraSeconds;
+        _commandCamouflageSafetyBandCelsius = settings.CommandCamouflageSafetyBandCelsius;
+        _stealthGovernorEnabled = settings.StealthGovernorEnabled;
+        _stealthGovernorTriggerScore = settings.StealthGovernorTriggerScore;
+        _stealthGovernorMinimumHoldMinutes = settings.StealthGovernorMinimumHoldMinutes;
+        _stealthGovernorMaximumHoldMinutes = settings.StealthGovernorMaximumHoldMinutes;
+        _stealthGovernorSafetyBandCelsius = settings.StealthGovernorSafetyBandCelsius;
+        _naturalCadenceEnabled = settings.NaturalCadenceEnabled;
+        _naturalCadenceTriggerTouches = settings.NaturalCadenceTriggerTouches;
+        _naturalCadenceMinimumMinutes = settings.NaturalCadenceMinimumMinutes;
+        _naturalCadenceMaximumMinutes = settings.NaturalCadenceMaximumMinutes;
+        _naturalCadenceJitterMinutes = settings.NaturalCadenceJitterMinutes;
+        _naturalCadenceSafetyBandCelsius = settings.NaturalCadenceSafetyBandCelsius;
+        _naturalChangePlannerEnabled = settings.NaturalChangePlannerEnabled;
+        _naturalChangePlannerTriggerTouches = settings.NaturalChangePlannerTriggerTouches;
+        _naturalChangePlannerMinimumMinutes = settings.NaturalChangePlannerMinimumMinutes;
+        _naturalChangePlannerMaximumMinutes = settings.NaturalChangePlannerMaximumMinutes;
+        _naturalChangePlannerJitterMinutes = settings.NaturalChangePlannerJitterMinutes;
+        _naturalChangePlannerSafetyBandCelsius = settings.NaturalChangePlannerSafetyBandCelsius;
+        _naturalChangePlannerPreferWeatherSlots = settings.NaturalChangePlannerPreferWeatherSlots;
+        _naturalChangePlannerPreferSensorBeat = settings.NaturalChangePlannerPreferSensorBeat;
+        _comfortEnvelopeEnabled = settings.ComfortEnvelopeEnabled;
+        _comfortEnvelopeTriggerTouches = settings.ComfortEnvelopeTriggerTouches;
+        _comfortEnvelopeHoldMinutes = settings.ComfortEnvelopeHoldMinutes;
+        _comfortEnvelopeMaxOffsetCelsius = settings.ComfortEnvelopeMaxOffsetCelsius;
+        _comfortEnvelopeSafetyBandCelsius = settings.ComfortEnvelopeSafetyBandCelsius;
+        _comfortCompromiseEnabled = settings.ComfortCompromiseEnabled;
+        _comfortCompromiseTriggerTouches = settings.ComfortCompromiseTriggerTouches;
+        _comfortCompromiseHoldMinutes = settings.ComfortCompromiseHoldMinutes;
+        _comfortCompromiseDecayMinutes = settings.ComfortCompromiseDecayMinutes;
+        _comfortCompromiseMaxOffsetCelsius = settings.ComfortCompromiseMaxOffsetCelsius;
+        _comfortCompromiseSafetyBandCelsius = settings.ComfortCompromiseSafetyBandCelsius;
+        _comfortMemoryEnabled = settings.ComfortMemoryEnabled;
+        _comfortMemoryLearningTouches = settings.ComfortMemoryLearningTouches;
+        _comfortMemoryRetentionHours = settings.ComfortMemoryRetentionHours;
+        _comfortMemoryMaxOffsetCelsius = settings.ComfortMemoryMaxOffsetCelsius;
+        _comfortMemorySafetyBandCelsius = settings.ComfortMemorySafetyBandCelsius;
+        _manualComfortGraceEnabled = settings.ManualComfortGraceEnabled;
+        _manualComfortGraceMinutes = settings.ManualComfortGraceMinutes;
+        _manualComfortGraceBandCelsius = settings.ManualComfortGraceBandCelsius;
+        _touchIntentEnabled = settings.TouchIntentEnabled;
+        _touchIntentMinimumTouches = settings.TouchIntentMinimumTouches;
+        _touchIntentWindowMinutes = settings.TouchIntentWindowMinutes;
+        _touchIntentNetWarmThresholdCelsius = settings.TouchIntentNetWarmThresholdCelsius;
+        _touchIntentExtraGraceMinutes = settings.TouchIntentExtraGraceMinutes;
+        _touchIntentSafetyBandCelsius = settings.TouchIntentSafetyBandCelsius;
+        _coolerIntentFastLaneEnabled = settings.CoolerIntentFastLaneEnabled;
+        _coolerIntentMinimumTouches = settings.CoolerIntentMinimumTouches;
+        _coolerIntentWindowMinutes = settings.CoolerIntentWindowMinutes;
+        _coolerIntentHoldMinutes = settings.CoolerIntentHoldMinutes;
+        _coolerIntentNetCoolThresholdCelsius = settings.CoolerIntentNetCoolThresholdCelsius;
+        _coolerIntentSafetyBandCelsius = settings.CoolerIntentSafetyBandCelsius;
+        _setpointEchoGuardEnabled = settings.SetpointEchoGuardEnabled;
+        _setpointEchoGraceSeconds = settings.SetpointEchoGraceSeconds;
+        _setpointEchoSafetyBandCelsius = settings.SetpointEchoSafetyBandCelsius;
+        _repeatCommandGuardEnabled = settings.RepeatCommandGuardEnabled;
+        _repeatCommandMinimumWaitSeconds = settings.RepeatCommandMinimumWaitSeconds;
+        _repeatCommandPressureExtraSeconds = settings.RepeatCommandPressureExtraSeconds;
+        _repeatCommandSafetyBandCelsius = settings.RepeatCommandSafetyBandCelsius;
+        _setpointStillnessGuardEnabled = settings.SetpointStillnessGuardEnabled;
+        _setpointStillnessTriggerTouches = settings.SetpointStillnessTriggerTouches;
+        _setpointStillnessRequiredSamples = settings.SetpointStillnessRequiredSamples;
+        _setpointStillnessMaxHoldSeconds = settings.SetpointStillnessMaxHoldSeconds;
+        _setpointStillnessToleranceCelsius = settings.SetpointStillnessToleranceCelsius;
+        _setpointStillnessSafetyBandCelsius = settings.SetpointStillnessSafetyBandCelsius;
+        _sensorRhythmGuardEnabled = settings.SensorRhythmGuardEnabled;
+        _sensorRhythmMinimumSamples = settings.SensorRhythmMinimumSamples;
+        _sensorRhythmWindowMinutes = settings.SensorRhythmWindowMinutes;
+        _sensorRhythmJitterSeconds = settings.SensorRhythmJitterSeconds;
+        _sensorRhythmSafetyBandCelsius = settings.SensorRhythmSafetyBandCelsius;
+        _hvacActionAlibiEnabled = settings.HvacActionAlibiEnabled;
+        _hvacActionAlibiTriggerTouches = settings.HvacActionAlibiTriggerTouches;
+        _hvacActionAlibiTransitionWindowSeconds = settings.HvacActionAlibiTransitionWindowSeconds;
+        _hvacActionAlibiMaxHoldMinutes = settings.HvacActionAlibiMaxHoldMinutes;
+        _hvacActionAlibiSafetyBandCelsius = settings.HvacActionAlibiSafetyBandCelsius;
+        _telemetryAlibiEnabled = settings.TelemetryAlibiEnabled;
+        _telemetryAlibiTriggerTouches = settings.TelemetryAlibiTriggerTouches;
+        _telemetryAlibiMinimumHoldSeconds = settings.TelemetryAlibiMinimumHoldSeconds;
+        _telemetryAlibiMaxHoldMinutes = settings.TelemetryAlibiMaxHoldMinutes;
+        _telemetryAlibiSafetyBandCelsius = settings.TelemetryAlibiSafetyBandCelsius;
+        _telemetryAlibiUseWeather = settings.TelemetryAlibiUseWeather;
+        _telemetryAlibiUseSensorBeat = settings.TelemetryAlibiUseSensorBeat;
+        _telemetryAlibiUsePeakPower = settings.TelemetryAlibiUsePeakPower;
+        _coolingRunwayGuardEnabled = settings.CoolingRunwayGuardEnabled;
+        _coolingRunwayMinimumSeconds = settings.CoolingRunwayMinimumSeconds;
+        _coolingRunwayPressureExtraSeconds = settings.CoolingRunwayPressureExtraSeconds;
+        _coolingRunwaySafetyBandCelsius = settings.CoolingRunwaySafetyBandCelsius;
+        _roomTrendGuardEnabled = settings.RoomTrendGuardEnabled;
+        _roomTrendWindowMinutes = settings.RoomTrendWindowMinutes;
+        _roomTrendStableToleranceCelsius = settings.RoomTrendStableToleranceCelsius;
+        _roomTrendHoldMinutes = settings.RoomTrendHoldMinutes;
+        _thermalMomentumGuardEnabled = settings.ThermalMomentumGuardEnabled;
+        _thermalMomentumMinimumCoolingRateCelsiusPerHour = settings.ThermalMomentumMinimumCoolingRateCelsiusPerHour;
+        _thermalMomentumLookAheadMinutes = settings.ThermalMomentumLookAheadMinutes;
+        _thermalMomentumHoldMinutes = settings.ThermalMomentumHoldMinutes;
+        _weatherDriftGuardEnabled = settings.WeatherDriftGuardEnabled;
+        _weatherDriftWindowMinutes = settings.WeatherDriftWindowMinutes;
+        _weatherDriftMinimumChangeCelsius = settings.WeatherDriftMinimumChangeCelsius;
+        _weatherDriftHoldMinutes = settings.WeatherDriftHoldMinutes;
+        _weatherDriftSafetyBandCelsius = settings.WeatherDriftSafetyBandCelsius;
+        _superDefenderModeEnabled = settings.SuperDefenderModeEnabled;
+        _superDefenderRemoteChangeThreshold = settings.SuperDefenderRemoteChangeThreshold;
+        _superDefenderWindowMinutes = settings.SuperDefenderWindowMinutes;
+        _superDefenderHoldMinutes = settings.SuperDefenderHoldMinutes;
+        _superDefenderSafetyBandCelsius = settings.SuperDefenderSafetyBandCelsius;
+        _superDefenderBypassQuietTiming = settings.SuperDefenderBypassQuietTiming;
+        _remoteSettlingGuardEnabled = settings.RemoteSettlingGuardEnabled;
+        _remoteSettlingTriggerChanges = settings.RemoteSettlingTriggerChanges;
+        _remoteSettlingWindowMinutes = settings.RemoteSettlingWindowMinutes;
+        _remoteSettlingHoldMinutes = settings.RemoteSettlingHoldMinutes;
+        _remoteSettlingSafetyBandCelsius = settings.RemoteSettlingSafetyBandCelsius;
+        _enforcerModeEnabled = settings.EnforcerModeEnabled;
+        _enforcerTargetTemperatureCelsius = settings.EnforcerTargetTemperatureCelsius;
+        _enforcerEnforceMode = settings.EnforcerEnforceMode;
+        _enforcerEnforceSetpoint = settings.EnforcerEnforceSetpoint;
+        _enforcerStealthShaping = settings.EnforcerStealthShaping;
+        _enforcerRespectOwner = settings.EnforcerRespectOwner;
+        _enforcerOwnerUserIds = settings.EnforcerOwnerUserIds;
+        _enforcerDebounceSeconds = settings.EnforcerDebounceSeconds;
+        _enforcerCooldownSeconds = settings.EnforcerCooldownSeconds;
+        _enforcerRateWindowMinutes = settings.EnforcerRateWindowMinutes;
+        _enforcerMaxAssertsPerWindow = settings.EnforcerMaxAssertsPerWindow;
+        _enforcerEscalateAfterOverrides = settings.EnforcerEscalateAfterOverrides;
+        _enforcerBackoffBaseSeconds = settings.EnforcerBackoffBaseSeconds;
+        _enforcerBackoffMaxSeconds = settings.EnforcerBackoffMaxSeconds;
+        _enforcerScheduleEnabled = settings.EnforcerScheduleEnabled;
+        _enforcerStartTime = settings.EnforcerStartTime;
+        _enforcerEndTime = settings.EnforcerEndTime;
+        _enforcerRequirePresence = settings.EnforcerRequirePresence;
+        _enforcerNotifyEnabled = settings.EnforcerNotifyEnabled;
+        _enforcerUseLearning = settings.EnforcerUseLearning;
+        _fanEnergySaverEnabled = settings.FanEnergySaverEnabled;
+        _fanEnergySaverThresholdCelsius = settings.FanEnergySaverThresholdCelsius;
+        _fanEnergySaverMode = settings.FanEnergySaverMode;
+        _peakPowerSaverEnabled = settings.PeakPowerSaverEnabled;
+        _peakPowerSaverOnPeakEnabled = settings.PeakPowerSaverOnPeakEnabled;
+        _peakPowerSaverHighPowerEnabled = settings.PeakPowerSaverHighPowerEnabled;
+        _peakPowerSaverPowerThresholdKilowatts = settings.PeakPowerSaverPowerThresholdKilowatts;
+        _peakPowerSaverPriceThresholdCentsPerKwh = settings.PeakPowerSaverPriceThresholdCentsPerKwh;
+        _peakPowerSaverHoldMinutes = settings.PeakPowerSaverHoldMinutes;
+        _peakPowerSaverRefreshSeconds = settings.PeakPowerSaverRefreshSeconds;
+        _peakPowerSaverSafetyBandCelsius = settings.PeakPowerSaverSafetyBandCelsius;
+        _peakPowerSaverFanSaverEnabled = settings.PeakPowerSaverFanSaverEnabled;
+        _peakPowerSaverFanMode = settings.PeakPowerSaverFanMode;
+        _frontDoorKillSwitchEnabled = settings.FrontDoorKillSwitchEnabled;
+        _frontDoorPersonEntityIds = settings.FrontDoorPersonEntityIds;
+        _frontDoorKillSwitchHoldMinutes = settings.FrontDoorKillSwitchHoldMinutes;
+        _frontDoorKillSwitchRefreshSeconds = settings.FrontDoorKillSwitchRefreshSeconds;
+        _frontDoorKillSwitchTurnsThermostatOff = settings.FrontDoorKillSwitchTurnsThermostatOff;
+        _upstairsComfortEnabled = settings.UpstairsComfortEnabled;
+        _upstairsTemperatureEntityIds = settings.UpstairsTemperatureEntityIds;
+        _upstairsMaxComfortCelsius = settings.UpstairsMaxComfortCelsius;
+        _upstairsComfortTargetCelsius = settings.UpstairsComfortTargetCelsius;
+        _upstairsComfortBoostCelsius = settings.UpstairsComfortBoostCelsius;
+        _homePresenceRequired = settings.HomePresenceRequired;
+        _presenceEntityIds = settings.PresenceEntityIds;
+        _schedule.Clear();
+        _schedule.AddRange(snapshot.Schedule.Select(CloneScheduleEntry));
+        _dirty = false;
+    }
+
+    private void SetDirty<T>(T value, Action<T> assign)
+    {
+        assign(value);
+        _dirty = true;
+    }
+
+    private void UpdateSchedule(ScheduleEntry entry, Action<ScheduleEntry> update)
+    {
+        update(entry);
+        _dirty = true;
+    }
+
+    private void AddSchedule()
+    {
+        _schedule.Add(new ScheduleEntry
+        {
+            Name = "Comfort",
+            Days = string.Join(",", Days),
+            StartTime = "18:00",
+            EndTime = "23:00",
+            TargetTemperatureCelsius = 22,
+            WeatherActivationMode = "always",
+            Enabled = true
+        });
+        _dirty = true;
+    }
+
+    private void RemoveSchedule(ScheduleEntry entry)
+    {
+        _schedule.Remove(entry);
+        _dirty = true;
+    }
+
+    private void ToggleDay(ScheduleEntry entry, string day)
+    {
+        var days = DaySet(entry);
+        if (!days.Add(day))
+        {
+            days.Remove(day);
+        }
+
+        entry.Days = string.Join(",", Days.Where(days.Contains));
+        _dirty = true;
+    }
+
+    private Variant DayVariant(ScheduleEntry entry, string day)
+    {
+        return DaySet(entry).Contains(day) ? Variant.Filled : Variant.Outlined;
+    }
+
+    private Color DayColor(ScheduleEntry entry, string day)
+    {
+        return DaySet(entry).Contains(day) ? Color.Primary : Color.Default;
+    }
+
+    private void SaveSettings()
+    {
+        var gate = StateStore.TryBeginWebsiteCommand("save settings", bypassDebounce: true);
+        if (!gate.Accepted)
+        {
+            _settingsStatus = $"Wait {gate.Snapshot.WebsiteCommandDebounce.SecondsRemaining}s";
+            Snackbar.Add(gate.Message, Severity.Warning);
+            return;
+        }
+
+        var request = new SettingsRequest(
+            _scheduleEnabled,
+            _weatherActivationMode,
+            _baseCooldownSeconds,
+            _maxCooldownSeconds,
+            _touchFrequencyWindowMinutes,
+            _coolModeRestoreDelayEnabled,
+            _coolModeRestoreMinimumDelaySeconds,
+            _coolModeRestoreMaximumDelaySeconds,
+            _coolModeRestoreComfortBandCelsius,
+            _conflictQuietModeEnabled,
+            _conflictQuietTouchThreshold,
+            _conflictQuietMinutes,
+            _conflictQuietComfortBandCelsius,
+            _tugOfWarTruceEnabled,
+            _tugOfWarTruceMinimumFlips,
+            _tugOfWarTruceWindowMinutes,
+            _tugOfWarTruceHoldMinutes,
+            _tugOfWarTruceSafetyBandCelsius,
+            _wallSettlingGuardEnabled,
+            _wallSettlingMinimumTouches,
+            _wallSettlingWindowMinutes,
+            _wallSettlingBaseSeconds,
+            _wallSettlingPressureExtraSeconds,
+            _wallSettlingSafetyBandCelsius,
+            _naturalRecoveryEnabled,
+            _adaptiveQuietnessEnabled,
+            _adaptiveQuietTouchThreshold,
+            _maximumAdaptiveDelaySeconds,
+            _minimumAdaptiveStepCelsius,
+            _maximumAdaptiveHoldChancePercent,
+            _maximumAdaptiveCommandGapSeconds,
+            _minimumNaturalDelaySeconds,
+            _maximumNaturalDelaySeconds,
+            _naturalStepCelsius,
+            _naturalHoldChancePercent,
+            _maxNaturalHolds,
+            _minimumCommandGapSeconds,
+            _naturalSafetyOverrideCelsius,
+            _naturalWalkbackEnabled,
+            _naturalWalkbackTriggerTouches,
+            _naturalWalkbackStepCelsius,
+            _naturalWalkbackJitterCelsius,
+            _naturalWalkbackSafetyBandCelsius,
+            _touchSignatureEnabled,
+            _touchSignatureTriggerTouches,
+            _touchSignatureRetentionMinutes,
+            _touchSignatureMinimumStepCelsius,
+            _touchSignatureMaximumStepCelsius,
+            _touchSignatureSafetyBandCelsius,
+            _humanNudgeEnabled,
+            _humanNudgeTriggerTouches,
+            _humanNudgeStepCelsius,
+            _humanNudgeSafetyBandCelsius,
+            _visibilityGuardEnabled,
+            _visibilityGuardTriggerNotices,
+            _visibilityGuardNoticeWindowMinutes,
+            _visibilityGuardAfterCommandSeconds,
+            _visibilityGuardMinimumHoldMinutes,
+            _visibilityGuardMaximumHoldMinutes,
+            _visibilityGuardSafetyBandCelsius,
+            _routineTimingEnabled,
+            _routineTimingTriggerTouches,
+            _routineTimingIntervalMinutes,
+            _routineTimingJitterMinutes,
+            _routineTimingMaxDelayMinutes,
+            _routineTimingSafetyBandCelsius,
+            _comfortBudgetEnabled,
+            _comfortBudgetWindowMinutes,
+            _comfortBudgetMaxCommands,
+            _comfortBudgetSafetyBandCelsius,
+            _commandCamouflageEnabled,
+            _commandCamouflageMinimumGapSeconds,
+            _commandCamouflagePressureExtraSeconds,
+            _commandCamouflageSafetyBandCelsius,
+            _stealthGovernorEnabled,
+            _stealthGovernorTriggerScore,
+            _stealthGovernorMinimumHoldMinutes,
+            _stealthGovernorMaximumHoldMinutes,
+            _stealthGovernorSafetyBandCelsius,
+            _naturalCadenceEnabled,
+            _naturalCadenceTriggerTouches,
+            _naturalCadenceMinimumMinutes,
+            _naturalCadenceMaximumMinutes,
+            _naturalCadenceJitterMinutes,
+            _naturalCadenceSafetyBandCelsius,
+            _naturalChangePlannerEnabled,
+            _naturalChangePlannerTriggerTouches,
+            _naturalChangePlannerMinimumMinutes,
+            _naturalChangePlannerMaximumMinutes,
+            _naturalChangePlannerJitterMinutes,
+            _naturalChangePlannerSafetyBandCelsius,
+            _naturalChangePlannerPreferWeatherSlots,
+            _naturalChangePlannerPreferSensorBeat,
+            _telemetryAlibiEnabled,
+            _telemetryAlibiTriggerTouches,
+            _telemetryAlibiMinimumHoldSeconds,
+            _telemetryAlibiMaxHoldMinutes,
+            _telemetryAlibiSafetyBandCelsius,
+            _telemetryAlibiUseWeather,
+            _telemetryAlibiUseSensorBeat,
+            _telemetryAlibiUsePeakPower,
+            _comfortEnvelopeEnabled,
+            _comfortEnvelopeTriggerTouches,
+            _comfortEnvelopeHoldMinutes,
+            _comfortEnvelopeMaxOffsetCelsius,
+            _comfortEnvelopeSafetyBandCelsius,
+            _comfortCompromiseEnabled,
+            _comfortCompromiseTriggerTouches,
+            _comfortCompromiseHoldMinutes,
+            _comfortCompromiseDecayMinutes,
+            _comfortCompromiseMaxOffsetCelsius,
+            _comfortCompromiseSafetyBandCelsius,
+            _comfortMemoryEnabled,
+            _comfortMemoryLearningTouches,
+            _comfortMemoryRetentionHours,
+            _comfortMemoryMaxOffsetCelsius,
+            _comfortMemorySafetyBandCelsius,
+            _manualComfortGraceEnabled,
+            _manualComfortGraceMinutes,
+            _manualComfortGraceBandCelsius,
+            _touchIntentEnabled,
+            _touchIntentMinimumTouches,
+            _touchIntentWindowMinutes,
+            _touchIntentNetWarmThresholdCelsius,
+            _touchIntentExtraGraceMinutes,
+            _touchIntentSafetyBandCelsius,
+            _coolerIntentFastLaneEnabled,
+            _coolerIntentMinimumTouches,
+            _coolerIntentWindowMinutes,
+            _coolerIntentHoldMinutes,
+            _coolerIntentNetCoolThresholdCelsius,
+            _coolerIntentSafetyBandCelsius,
+            _setpointEchoGuardEnabled,
+            _setpointEchoGraceSeconds,
+            _setpointEchoSafetyBandCelsius,
+            _repeatCommandGuardEnabled,
+            _repeatCommandMinimumWaitSeconds,
+            _repeatCommandPressureExtraSeconds,
+            _repeatCommandSafetyBandCelsius,
+            _setpointStillnessGuardEnabled,
+            _setpointStillnessTriggerTouches,
+            _setpointStillnessRequiredSamples,
+            _setpointStillnessMaxHoldSeconds,
+            _setpointStillnessToleranceCelsius,
+            _setpointStillnessSafetyBandCelsius,
+            _sensorRhythmGuardEnabled,
+            _sensorRhythmMinimumSamples,
+            _sensorRhythmWindowMinutes,
+            _sensorRhythmJitterSeconds,
+            _sensorRhythmSafetyBandCelsius,
+            _hvacActionAlibiEnabled,
+            _hvacActionAlibiTriggerTouches,
+            _hvacActionAlibiTransitionWindowSeconds,
+            _hvacActionAlibiMaxHoldMinutes,
+            _hvacActionAlibiSafetyBandCelsius,
+            _coolingRunwayGuardEnabled,
+            _coolingRunwayMinimumSeconds,
+            _coolingRunwayPressureExtraSeconds,
+            _coolingRunwaySafetyBandCelsius,
+            _roomTrendGuardEnabled,
+            _roomTrendWindowMinutes,
+            _roomTrendStableToleranceCelsius,
+            _roomTrendHoldMinutes,
+            _thermalMomentumGuardEnabled,
+            _thermalMomentumMinimumCoolingRateCelsiusPerHour,
+            _thermalMomentumLookAheadMinutes,
+            _thermalMomentumHoldMinutes,
+            _weatherDriftGuardEnabled,
+            _weatherDriftWindowMinutes,
+            _weatherDriftMinimumChangeCelsius,
+            _weatherDriftHoldMinutes,
+            _weatherDriftSafetyBandCelsius,
+            _peakPowerSaverEnabled,
+            _peakPowerSaverOnPeakEnabled,
+            _peakPowerSaverHighPowerEnabled,
+            _peakPowerSaverPowerThresholdKilowatts,
+            _peakPowerSaverPriceThresholdCentsPerKwh,
+            _peakPowerSaverHoldMinutes,
+            _peakPowerSaverRefreshSeconds,
+            _peakPowerSaverSafetyBandCelsius,
+            _peakPowerSaverFanSaverEnabled,
+            _peakPowerSaverFanMode,
+            _frontDoorKillSwitchEnabled,
+            _frontDoorPersonEntityIds,
+            _frontDoorKillSwitchHoldMinutes,
+            _frontDoorKillSwitchRefreshSeconds,
+            _frontDoorKillSwitchTurnsThermostatOff,
+            _superDefenderModeEnabled,
+            _superDefenderRemoteChangeThreshold,
+            _superDefenderWindowMinutes,
+            _superDefenderHoldMinutes,
+            _superDefenderSafetyBandCelsius,
+            _superDefenderBypassQuietTiming,
+            _remoteSettlingGuardEnabled,
+            _remoteSettlingTriggerChanges,
+            _remoteSettlingWindowMinutes,
+            _remoteSettlingHoldMinutes,
+            _remoteSettlingSafetyBandCelsius,
+            _fanEnergySaverEnabled,
+            _fanEnergySaverThresholdCelsius,
+            _fanEnergySaverMode,
+            _upstairsComfortEnabled,
+            _upstairsTemperatureEntityIds,
+            _upstairsMaxComfortCelsius,
+            _upstairsComfortTargetCelsius,
+            _upstairsComfortBoostCelsius,
+            _homePresenceRequired,
+            _presenceEntityIds,
+            _schedule.Select(CloneScheduleEntry).ToList(),
+            _enforcerModeEnabled,
+            _enforcerTargetTemperatureCelsius,
+            _enforcerEnforceMode,
+            _enforcerEnforceSetpoint,
+            _enforcerStealthShaping,
+            _enforcerRespectOwner,
+            _enforcerOwnerUserIds,
+            _enforcerDebounceSeconds,
+            _enforcerCooldownSeconds,
+            _enforcerRateWindowMinutes,
+            _enforcerMaxAssertsPerWindow,
+            _enforcerEscalateAfterOverrides,
+            _enforcerBackoffBaseSeconds,
+            _enforcerBackoffMaxSeconds,
+            _enforcerScheduleEnabled,
+            _enforcerStartTime,
+            _enforcerEndTime,
+            _enforcerRequirePresence,
+            _enforcerNotifyEnabled,
+            _enforcerUseLearning,
+            _websiteCommandDebounceEnabled,
+            _nightShutdownEnabled,
+            _nightShutdownStartTime,
+            _nightShutdownEndTime,
+            _nightShutdownOutdoorBelowCelsius,
+            _coolingStepMinimumGapSeconds,
+            _peaceOfferingEnabled,
+            _peaceOfferingStepCelsius,
+            _peaceOfferingHoldMinutes,
+            _nightMinimumSetPointCelsius,
+            _coolingRestEnabled,
+            _coolingRunMaxMinutes,
+            _coolingRestMinutes,
+            _standDownParkEnabled,
+            _standDownParkSetPointCelsius,
+            _autoBrotherMadEnabled,
+            _autoBrotherMadTouches,
+            _autoBrotherMadWindowMinutes,
+            _autoBrotherMadBigRaiseCelsius,
+            _nightCoolingBudgetMinutes,
+            _electricityBudgetEnabled,
+            _electricityMonthlyBudgetDollars,
+            _electricityBudgetAggressiveness,
+            _electricityBudgetMaxSetpointOffsetCelsius,
+            _electricityBudgetSafetyMaxCelsius,
+            _electricityBudgetBasis);
+
+        var snapshot = StateStore.UpdateSettings(request);
+        LoadFromSnapshot(snapshot);
+        _settingsStatus = $"Saved {TorontoNow():HH:mm:ss}";
+        Snackbar.Add("Settings saved.", Severity.Success);
+    }
+
+    private static DateTimeOffset TorontoNow()
+    {
+        return TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, TorontoTimeZone);
+    }
+
+    private static TimeZoneInfo ResolveTorontoTimeZone()
+    {
+        try
+        {
+            return TimeZoneInfo.FindSystemTimeZoneById("America/Toronto");
+        }
+        catch (TimeZoneNotFoundException)
+        {
+            return TimeZoneInfo.FindSystemTimeZoneById("Eastern Standard Time");
+        }
+    }
+
+    private static HashSet<string> DaySet(ScheduleEntry entry)
+    {
+        return entry.Days
+            .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static ScheduleEntry CloneScheduleEntry(ScheduleEntry entry)
+    {
+        return new ScheduleEntry
+        {
+            Id = string.IsNullOrWhiteSpace(entry.Id) ? Guid.NewGuid().ToString("N") : entry.Id,
+            Enabled = entry.Enabled,
+            Name = entry.Name,
+            Days = entry.Days,
+            StartTime = entry.StartTime,
+            EndTime = entry.EndTime,
+            TargetTemperatureCelsius = entry.TargetTemperatureCelsius,
+            WeatherActivationMode = entry.WeatherActivationMode
+        };
+    }
+
+    private static string Summary(ScheduleEntry entry)
+    {
+        var days = DaySet(entry);
+        var dayText = days.Count == 7 ? "Every day" : days.Count == 0 ? "No days" : string.Join(", ", Days.Where(days.Contains));
+        var weather = ScheduleWeatherOptions.FirstOrDefault(option => option.Value == entry.WeatherActivationMode).Label ?? "Always";
+        return $"{(entry.Enabled ? "Active" : "Off")} / {dayText} / {entry.StartTime}-{entry.EndTime} / {entry.TargetTemperatureCelsius:0.0} C / {weather}";
+    }
+
+    private static bool MatchesSettingsSearch(string search, params string[] values)
+    {
+        var terms = (search ?? string.Empty)
+            .Split(' ', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        return terms.Length == 0
+            || terms.All(term => values.Any(value => value.Contains(term, StringComparison.OrdinalIgnoreCase)));
+    }
+}

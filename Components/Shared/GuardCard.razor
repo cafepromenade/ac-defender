@@ -1,0 +1,414 @@
+@* One defender guard: live state chip + plain explainer + extra-specific live field report. *@
+<MudPaper Class="@($"guard-card guard-card--{Tone.Css()}")" Elevation="0">
+    <div class="guard-card__head">
+        <div class="guard-card__title">
+            <span class="@($"guard-avatar guard-avatar--{Tone.Css()}")" aria-hidden="true">@Initials</span>
+            <div class="guard-card__id">
+                <MudText Typo="Typo.subtitle1">@Info.Name</MudText>
+                <span class="guard-card__rank">@RankText</span>
+            </div>
+        </div>
+        <span class="@($"guard-badge guard-badge--{Tone.Css()}")">@view.StateLabel</span>
+    </div>
+
+    <MudText Typo="Typo.body2" Class="guard-card__status">@view.StatusText</MudText>
+
+    @if (view.Metrics.Count > 0)
+    {
+        <div class="guard-card__metrics">
+            @foreach (var metric in view.Metrics)
+            {
+                <MudTooltip Text="@metric.Help" Disabled="@string.IsNullOrWhiteSpace(metric.Help)">
+                    <div class="guard-metric">
+                        <span class="guard-metric__label">@metric.Label</span>
+                        <span class="guard-metric__value">@metric.Value</span>
+                    </div>
+                </MudTooltip>
+            }
+        </div>
+    }
+
+    <div class="guard-card__actions">
+        <MudButton Class="guard-card__more"
+                   Variant="Variant.Text"
+                   Size="Size.Small"
+                   OnClick="@(() => _open = !_open)"
+                   EndIcon="@(_open ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)">
+            How this works
+        </MudButton>
+
+        <MudButton Class="guard-card__more"
+                   Variant="Variant.Text"
+                   Color="Color.Info"
+                   Size="Size.Small"
+                   OnClick="@(() => _detailOpen = !_detailOpen)"
+                   StartIcon="@Icons.Material.Filled.FactCheck"
+                   EndIcon="@(_detailOpen ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)">
+            More extra-specific info
+        </MudButton>
+    </div>
+
+    <MudCollapse Expanded="_open">
+        <div class="guard-help">
+            <p class="guard-help__summary">@Info.Summary</p>
+            <p><span class="guard-help__tag">Watches</span> @Info.Watches</p>
+            <p><span class="guard-help__tag">Logic</span> @Info.Logic</p>
+            <p><span class="guard-help__tag">Does</span> @Info.Output</p>
+            @if (Info.Settings.Count > 0)
+            {
+                <p class="helper-text"><span class="guard-help__tag">Settings</span> @string.Join(", ", Info.Settings)</p>
+            }
+        </div>
+    </MudCollapse>
+
+    <MudCollapse Expanded="_detailOpen">
+        <div class="guard-detail">
+            <div class="guard-detail__brief">
+                @foreach (var item in DetailBriefItems)
+                {
+                    <div class="guard-detail-brief">
+                        <span>@item.Label</span>
+                        <strong>@item.Value</strong>
+                        <small>@item.Help</small>
+                    </div>
+                }
+            </div>
+
+            <div class="guard-detail__row guard-detail__row--next">
+                <div class="guard-detail__label">
+                    <MudIcon Icon="@Icons.Material.Filled.NearMe" Size="Size.Small" />
+                    Next step in this cycle
+                </div>
+                <div class="guard-detail__text">@NextStepText</div>
+            </div>
+
+            <div class="guard-detail__row">
+                <div class="guard-detail__label">
+                    <MudIcon Icon="@Icons.Material.Filled.Bolt" Size="Size.Small" />
+                    Current trigger verdict
+                </div>
+                <div class="guard-detail__text">@TriggeredByText</div>
+            </div>
+
+            <div class="guard-detail__row">
+                <div class="guard-detail__label">
+                    <MudIcon Icon="@Icons.Material.Filled.ManageSearch" Size="Size.Small" />
+                    What triggered this evidence
+                </div>
+                <div class="guard-detail__text">@EvidenceSourceText</div>
+            </div>
+
+            <div class="guard-detail__row">
+                <div class="guard-detail__label">
+                    <MudIcon Icon="@Icons.Material.Filled.Flag" Size="Size.Small" />
+                    What would trigger it next
+                </div>
+                <div class="guard-detail__text">@FutureTriggerText</div>
+            </div>
+
+            <div class="guard-detail__row">
+                <div class="guard-detail__label">
+                    <MudIcon Icon="@Icons.Material.Filled.Radar" Size="Size.Small" />
+                    What it is waiting to see
+                </div>
+                <div class="guard-detail__text">@WaitingForText</div>
+            </div>
+
+            <div class="guard-detail__row">
+                <div class="guard-detail__label">
+                    <MudIcon Icon="@Icons.Material.Filled.GppMaybe" Size="Size.Small" />
+                    What clears or skips it
+                </div>
+                <div class="guard-detail__text">@ClearOrBypassText</div>
+            </div>
+
+            <div class="guard-detail__row">
+                <div class="guard-detail__label">
+                    <MudIcon Icon="@Icons.Material.Filled.SecurityUpdateGood" Size="Size.Small" />
+                    Action if this card wins
+                </div>
+                <div class="guard-detail__text">@ActionIfTriggeredText</div>
+            </div>
+
+            <div class="guard-detail__row">
+                <div class="guard-detail__label">
+                    <MudIcon Icon="@Icons.Material.Filled.Route" Size="Size.Small" />
+                    Current defender next action
+                </div>
+                <div class="guard-detail__text">@GlobalNextActionText</div>
+            </div>
+
+            <div class="guard-detail__row">
+                <div class="guard-detail__label">
+                    <MudIcon Icon="@Icons.Material.Filled.LowPriority" Size="Size.Small" />
+                    What can outrank this card
+                </div>
+                <div class="guard-detail__text">@OverrideText</div>
+            </div>
+
+            <div class="guard-detail__algorithm">
+                <div class="guard-detail__label">
+                    <MudIcon Icon="@Icons.Material.Filled.AccountTree" Size="Size.Small" />
+                    Exact algorithm path
+                </div>
+                <ol>
+                    @foreach (var step in AlgorithmSteps)
+                    {
+                        <li>@step</li>
+                    }
+                </ol>
+            </div>
+
+            @if (view.Metrics.Count > 0)
+            {
+                <div class="guard-detail__evidence">
+                    <div class="guard-detail__label">
+                        <MudIcon Icon="@Icons.Material.Filled.Analytics" Size="Size.Small" />
+                        Live evidence on this card
+                    </div>
+                    <div class="guard-detail__metrics">
+                        @foreach (var metric in view.Metrics)
+                        {
+                            <div class="guard-detail-metric">
+                                <span>@metric.Label</span>
+                                <strong>@metric.Value</strong>
+                                @if (!string.IsNullOrWhiteSpace(metric.Help))
+                                {
+                                    <small>@metric.Help</small>
+                                }
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    </MudCollapse>
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired] public GuardInfo Info { get; set; } = default!;
+    [Parameter, EditorRequired] public DefenderSnapshot Snapshot { get; set; } = default!;
+
+    private bool _open;
+    private bool _detailOpen;
+
+    private string Initials => string.Concat(
+        Info.Name.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(2).Select(w => char.ToUpperInvariant(w[0])));
+
+    private string RankText => Info.Category switch
+    {
+        GuardCategory.Core => "SGT · CORE COOLING",
+        GuardCategory.WallTouch => "CPL · WALL-TOUCH OPS",
+        GuardCategory.Sensor => "SPC · SENSOR TIMING",
+        GuardCategory.System => "LT · SAFETY & SYSTEM",
+        _ => Info.Category.ToString().ToUpperInvariant()
+    };
+    private GuardLiveView view = default!;
+    private static readonly IReadOnlyList<GuardInfo> LiveCards = GuardCatalog.Live.ToList();
+    private GuardTone Tone => view.Tone;
+    private int GuardOrder => GetGuardOrder();
+    private IReadOnlyList<DetailBriefItem> DetailBriefItems =>
+    [
+        new("Card", GuardOrderText, $"Position in the visible guard reference order. Next reference stop: {NextGuardText}."),
+        new("Lane", CategoryName, "Which part of the defender decision board this action belongs to."),
+        new("Verdict", VerdictText, "Whether this guard is off, quietly watching, or actively holding/shaping/alerting."),
+        new("Next check", Snapshot.NextActionAt is { } next ? Format.ShortTime(next) : "live loop", "Toronto 24-hour time for the next planned worker check or command.")
+    ];
+
+    private string CategoryName => Info.Category switch
+    {
+        GuardCategory.Core => "core cooling",
+        GuardCategory.WallTouch => "wall-touch response",
+        GuardCategory.Sensor => "sensor timing",
+        GuardCategory.System => "safety and system",
+        _ => Info.Category.ToString()
+    };
+
+    private string NextStepText
+    {
+        get
+        {
+            if (!view.Enabled)
+            {
+                return $"{Info.Name} is disabled. When the worker reaches this rule, it marks the action ineligible, does not send a thermostat command from this card, and keeps walking toward {NextGuardText}.";
+            }
+
+            if (view.Busy)
+            {
+                return $"{Info.Name} is {view.StateLabel.ToLowerInvariant()} on reference card {GuardOrderText}. The next pass keeps this card's action in force, refreshes the live evidence from Home Assistant, and only releases the worker when the trigger clears, the timer expires, or a comfort/safety override wins.";
+            }
+
+            return $"{Info.Name} is watching on reference card {GuardOrderText}. On the next live loop it will re-read the evidence, compare it to the trigger rule, and pass control to {NextGuardText} unless this card becomes the winning rule.";
+        }
+    }
+
+    private string TriggeredByText
+    {
+        get
+        {
+            if (!view.Enabled)
+            {
+                return $"Nothing triggered it because this card is disabled. Related switches or values: {SettingsText}.";
+            }
+
+            return view.Busy
+                ? $"Triggered now because the live Home Assistant snapshot matches this card's trigger and the card reports '{view.StateLabel}'. Status sentence: {view.StatusText}"
+                : $"Not triggered right now. It is eligible, but the current readings do not make this card the winner. Status sentence: {view.StatusText}";
+        }
+    }
+
+    private string FutureTriggerText =>
+        $"{Info.Name} will trigger when the watched signals cross this rule: {Info.Logic} The settings that change that threshold are: {SettingsText}.";
+
+    private string EvidenceSourceText =>
+        view.Metrics.Count == 0
+            ? $"This card has no dedicated mini-metrics yet. Its evidence still comes from the real Home Assistant snapshot and defender memory described here: {Info.Watches}"
+            : $"The evidence came from these live fields: {MetricEvidenceText}. Those fields are derived from: {Info.Watches}";
+
+    private string WaitingForText
+    {
+        get
+        {
+            if (!view.Enabled)
+            {
+                return $"It is waiting for the related setting to be enabled. Until then, this card cannot win the cycle.";
+            }
+
+            if (view.Busy)
+            {
+                return $"It is already active. The next meaningful change is a timer ending, a watched value leaving the trigger range, or a higher-priority comfort/safety rule taking over.";
+            }
+
+            return $"It is waiting for a future live reading where {Info.Logic} Until then, the card stays quiet and the worker continues toward {NextGuardText}.";
+        }
+    }
+
+    private string ClearOrBypassText
+    {
+        get
+        {
+            if (!view.Enabled)
+            {
+                return $"Turning the related setting back on makes this step eligible again. Until then it is skipped and the defender checks {NextGuardText}.";
+            }
+
+            return view.Busy
+                ? "It will clear when its timer/condition ends, when the watched evidence no longer matches, or when a higher-priority comfort/safety guard says cooling must happen now."
+                : $"It stays quiet until the watched evidence crosses its trigger. Warm-room comfort, severe upstairs heat, or explicit quiet-bypass rules can also skip this timing card so real cooling is not delayed.";
+        }
+    }
+
+    private string ActionIfTriggeredText
+    {
+        get
+        {
+            var passText = NextGuardText == "the real thermostat command stage"
+                ? "If it does not trigger, the defender can continue toward the real thermostat command stage."
+                : $"If it does not trigger, the next card checked is {NextGuardText}.";
+
+            return $"If this card wins this cycle, it will do this: {Info.Output} {passText}";
+        }
+    }
+
+    private string OverrideText => Info.Category switch
+    {
+        GuardCategory.Core => "Core cooling is near the top of the stack. Emergency pause, front-door kill switch, disabled defender mode, and direct Home Assistant errors can still stop it.",
+        GuardCategory.WallTouch => "Warm-room comfort, severe upstairs heat, cooler-intent fast lane, Super Defender strict mode, emergency pause, and front-door kill switch can step ahead of this stealth/timing rule.",
+        GuardCategory.Sensor => "If the room gets too warm, upstairs heat becomes severe, or a direct cooling safety path is needed, this sensor-timing hold steps aside so comfort wins.",
+        GuardCategory.System => "A more urgent system rule can outrank it: emergency protocols, front-door kill switch, cooling-failure alert, disabled defender mode, or a comfort safety override.",
+        _ => "Higher-priority comfort and safety rules can always step ahead of this card."
+    };
+
+    private string GlobalNextActionText
+    {
+        get
+        {
+            var when = Snapshot.NextActionAt is null
+                ? string.Empty
+                : $" Planned Toronto time: {Format.ShortTime(Snapshot.NextActionAt)}.";
+            return $"{Snapshot.NextAction}{when} This is the actual worker label, so it may point at a different card when another guard is currently winning.";
+        }
+    }
+
+    private IReadOnlyList<string> AlgorithmSteps =>
+    [
+        $"Locate {Info.Name} as reference card {GuardOrderText} in the {CategoryName} lane.",
+        "Read the current real Home Assistant climate/weather/sensor response, then merge it with stored defender memory such as recent touches, command times, hold timers, and source attribution.",
+        $"Load this card's watched signals: {Info.Watches}",
+        $"Load this card's tuning settings: {SettingsText}.",
+        $"Evaluate the trigger formula: {Info.Logic}",
+        $"Evaluate current evidence: {MetricEvidenceText}",
+        $"Card verdict right now: {VerdictText}.",
+        view.Busy
+            ? $"Because it is active, the worker applies or continues this action: {Info.Output}"
+            : $"Because it is not active, the worker does not let this card stop the cycle and proceeds toward {NextGuardText}.",
+        $"After this card, the global worker label says: {Snapshot.NextAction}",
+        "Before any thermostat command is sent, comfort and safety overrides get a final chance to skip subtle timing so the room does not stay hot just to look natural."
+    ];
+
+    private string GuardOrderText => GuardOrder <= 0
+        ? "unknown"
+        : $"{GuardOrder}/{LiveCards.Count}";
+
+    private string NextGuardText
+    {
+        get
+        {
+            if (GuardOrder <= 0 || GuardOrder >= LiveCards.Count)
+            {
+                return "the real thermostat command stage";
+            }
+
+            return LiveCards[GuardOrder].Name;
+        }
+    }
+
+    private string SettingsText => Info.Settings.Count == 0
+        ? "no user-facing settings"
+        : string.Join(", ", Info.Settings);
+
+    private string MetricEvidenceText => view.Metrics.Count == 0
+        ? "this card has no dedicated metric yet, so use the status sentence and Home Assistant snapshot."
+        : string.Join("; ", view.Metrics.Select(m =>
+        {
+            var help = string.IsNullOrWhiteSpace(m.Help) ? string.Empty : $" ({m.Help})";
+            return $"{m.Label} = {m.Value}{help}";
+        }));
+
+    private string VerdictText
+    {
+        get
+        {
+            if (!view.Enabled)
+            {
+                return "Skipped";
+            }
+
+            return view.Busy
+                ? $"{view.StateLabel} now"
+                : "Watching";
+        }
+    }
+
+    private int GetGuardOrder()
+    {
+        for (var i = 0; i < LiveCards.Count; i++)
+        {
+            if (ReferenceEquals(LiveCards[i], Info) || LiveCards[i].Name == Info.Name)
+            {
+                return i + 1;
+            }
+        }
+
+        return 0;
+    }
+
+    protected override void OnParametersSet()
+    {
+        view = Info.Project is null
+            ? new GuardLiveView(false, false, "Reference", GuardTone.Off, Info.Summary, Array.Empty<MetricItem>())
+            : Info.Project(Snapshot);
+    }
+
+    private sealed record DetailBriefItem(string Label, string Value, string Help);
+}
