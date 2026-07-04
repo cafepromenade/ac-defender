@@ -8715,6 +8715,23 @@ public sealed class DefenderStateStore
             ? "auto"
             : saved.Settings.PeakPowerSaverFanMode.Trim();
         saved.Settings.FrontDoorPersonEntityIds = saved.Settings.FrontDoorPersonEntityIds?.Trim() ?? string.Empty;
+        saved.Settings.PresenceEntityIds = saved.Settings.PresenceEntityIds?.Trim() ?? string.Empty;
+        // Seed the runtime occupancy roles from the Matter "Defender Sensor" when the user hasn't chosen
+        // an entity yet. Seeding an id only names the sensor; the front-door kill switch still needs its
+        // Enabled flag to act, and a real Home Assistant error surfaces if the entity is missing.
+        var defenderSensor = (options.DefenderSensorEntityId ?? string.Empty).Trim();
+        if (defenderSensor.Length > 0)
+        {
+            if (saved.Settings.FrontDoorPersonEntityIds.Length == 0)
+            {
+                saved.Settings.FrontDoorPersonEntityIds = defenderSensor;
+            }
+
+            if (saved.Settings.PresenceEntityIds.Length == 0)
+            {
+                saved.Settings.PresenceEntityIds = defenderSensor;
+            }
+        }
         saved.Settings.FrontDoorKillSwitchHoldMinutes = Math.Clamp(saved.Settings.FrontDoorKillSwitchHoldMinutes <= 0 ? 20 : saved.Settings.FrontDoorKillSwitchHoldMinutes, 1, 240);
         saved.Settings.FrontDoorKillSwitchRefreshSeconds = Math.Clamp(saved.Settings.FrontDoorKillSwitchRefreshSeconds <= 0 ? 5 : saved.Settings.FrontDoorKillSwitchRefreshSeconds, 2, 300);
         saved.Settings.SuperDefenderRemoteChangeThreshold = Math.Clamp(saved.Settings.SuperDefenderRemoteChangeThreshold, 1, 20);

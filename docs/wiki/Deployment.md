@@ -63,6 +63,20 @@ HomeAssistant__Username=optional-bookkeeping-only
 HomeAssistant__Password=optional-bookkeeping-only
 ```
 
+Occupancy — the Matter **Defender Sensor**:
+
+```text
+Defender__DefenderSensorEntityId=binary_sensor.defender_sensor_occupancy
+```
+
+A dining-room occupancy `binary_sensor` (e.g. a Matter presence sensor). When set, it **seeds every
+occupancy role that has no explicit entity yet** — the front-door person detector, the presence input,
+the master-bedroom occupancy triggers, and the tracked-person context — so one sensor wires them all.
+Any per-role entity chosen on the **Settings** page still wins, and seeding an id never arms a guard on
+its own (the front-door kill switch still needs its Enabled toggle). A real Home Assistant error shows
+if the entity is missing. Leave blank to disable the seeding. Confirm the exact entity id under Home
+Assistant → Settings → Devices & Services → the Defender Sensor device.
+
 If `WeatherEntityId` is blank the app discovers the first `weather.*` entity; with no weather
 entity, `OutdoorTemperatureEntityId` can still provide outdoor temperature. The usage entities
 come from the Ontario Energy integration; AC Defender only reads them once Home Assistant has

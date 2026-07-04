@@ -20,6 +20,29 @@ if (await CliCommands.TryRunAsync(args, builder.Configuration))
 builder.Services.Configure<HomeAssistantOptions>(builder.Configuration.GetSection(HomeAssistantOptions.SectionName));
 builder.Services.Configure<DefenderOptions>(builder.Configuration.GetSection(DefenderOptions.SectionName));
 builder.Services.Configure<KioskOptions>(builder.Configuration.GetSection(KioskOptions.SectionName));
+
+// Seed the option-based occupancy roles (master-bedroom triggers, tracked person) from the Matter
+// "Defender Sensor" when no explicit entities are configured. The runtime roles (presence, front-door)
+// are seeded on settings load. An explicit config/Settings value always wins.
+builder.Services.PostConfigure<HomeAssistantOptions>(ha =>
+{
+    var defenderSensor = (builder.Configuration[$"{DefenderOptions.SectionName}:DefenderSensorEntityId"]
+        ?? DefenderOptions.DefaultDefenderSensorEntityId).Trim();
+    if (defenderSensor.Length == 0)
+    {
+        return;
+    }
+
+    if (string.IsNullOrWhiteSpace(ha.MasterBedroomEntityIds))
+    {
+        ha.MasterBedroomEntityIds = defenderSensor;
+    }
+
+    if (string.IsNullOrWhiteSpace(ha.TrackedPersonEntityIds))
+    {
+        ha.TrackedPersonEntityIds = defenderSensor;
+    }
+});
 builder.Services.AddSingleton<DefenderStateStore>();
 builder.Services.AddSingleton<AcDefenderService>();
 builder.Services.AddSingleton<TwoFactorAuth>();

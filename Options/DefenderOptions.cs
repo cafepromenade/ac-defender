@@ -134,6 +134,19 @@ public sealed class DefenderOptions
     /// </summary>
     public string WakeTruceDoorSensorEntityId { get; set; } = "";
 
+    /// <summary>
+    /// The Matter "Defender Sensor" — a dining-room occupancy <c>binary_sensor</c>. When set, it seeds
+    /// every occupancy role that hasn't been given an explicit entity yet: the front-door person
+    /// detector, the presence input, the master-bedroom occupancy triggers, and the tracked-person
+    /// context. Any per-role entity chosen on the Settings page still wins. Seeding an id never arms a
+    /// guard on its own (e.g. the front-door kill switch still needs its Enabled flag), and the app
+    /// reports a real Home Assistant error if the entity does not exist. Override with
+    /// <c>Defender__DefenderSensorEntityId</c>; blank disables the seeding.
+    /// </summary>
+    public string DefenderSensorEntityId { get; set; } = DefaultDefenderSensorEntityId;
+
+    public const string DefaultDefenderSensorEntityId = "binary_sensor.defender_sensor_occupancy";
+
     public string WakeTruceWindowStart { get; set; } = "04:00";
 
     public string WakeTruceWindowEnd { get; set; } = "09:00";
