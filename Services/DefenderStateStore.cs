@@ -37,7 +37,15 @@ public sealed class DefenderStateStore
     private readonly DefenderOptions options;
     private readonly ILogger<DefenderStateStore> logger;
     private readonly string stateFilePath;
+    // Append-only, never-capped audit of every thermostat change, one compact JSON object per line,
+    // written to the SAME (persisted) directory as the state file. The in-memory ThermostatChanges
+    // list caps at 100 so the UI stays light; this file keeps every change forever so history is
+    // never lost as older entries roll off the list. See AppendThermostatHistory.
+    private readonly string historyFilePath;
+    private readonly object historyGate = new();
     private readonly JsonSerializerOptions jsonOptions = new(JsonSerializerDefaults.Web) { WriteIndented = true };
+    // Compact (single-line) serializer for the JSON-lines history file.
+    private readonly JsonSerializerOptions historyJsonOptions = new(JsonSerializerDefaults.Web) { WriteIndented = false };
     private readonly Random random = new();
     // The rival AC app's own temperature schedule, parsed once from configuration. This is the OTHER
     // side's plan — never a defender target source. See Services/RivalScheduleWatch.cs.
@@ -50,7 +58,9 @@ public sealed class DefenderStateStore
         this.logger = logger;
         rivalScheduleBlocks = RivalScheduleWatch.Parse(this.options.RivalScheduleBlocks);
         stateFilePath = ResolveStatePath(this.options.StateFilePath, environment.ContentRootPath);
+        historyFilePath = Path.Combine(Path.GetDirectoryName(stateFilePath) ?? ".", "thermostat-history.jsonl");
         state = LoadState();
+        BackfillHistoryFromStateOnce();
         SeedBudgetSettingsFromOptionsOnce();
     }
 
@@ -110,6 +120,9 @@ public sealed class DefenderStateStore
         lock (gate)
         {
             state.TargetTemperatureCelsius = NormalizeTargetTemperature(temperatureCelsius);
+            // A deliberate website target overrides any standing repeated-raise surrender.
+            state.SurrenderUntil = null;
+            state.SurrenderTargetCelsius = null;
             ResetCoolingDefenderStep();
             ResetNaturalRecovery("Website target changed; comfort sync is ready.");
             state.UpdatedAt = DateTimeOffset.UtcNow;
@@ -1466,6 +1479,23 @@ public sealed class DefenderStateStore
     /// The per-day AC usage ledger for the Energy calendar, ordered oldest → newest. Hours are real
     /// compressor time; dollars are the assumed-load TOU estimate (see AcCostEstimate options).
     /// </summary>
+    /// <summary>
+    /// Someone pressed the kiosk's "show this &amp; last month's usage" button. The kiosk itself is
+    /// unbranded, but the press is a valuable signal here: a person is actively concerned about
+    /// costs. Recorded as an event so cost sensitivity shows up in the defender's own timeline.
+    /// </summary>
+    public void RecordKioskCostConcern(DateTimeOffset now)
+    {
+        lock (gate)
+        {
+            state.KioskCostConcernAt = now;
+            state.KioskCostConcernCount++;
+            AddEvent("info",
+                $"Energy kiosk usage button pressed at {now.ToLocalTime():HH:mm:ss} — someone is reviewing the costs (press #{state.KioskCostConcernCount}).");
+            SaveState();
+        }
+    }
+
     public IReadOnlyList<AcDailyUsage> GetAcDailyUsage()
     {
         lock (gate)
@@ -2068,11 +2098,30 @@ public sealed class DefenderStateStore
     {
         lock (gate)
         {
+            var now = DateTimeOffset.UtcNow;
+
+            // TAMPER TRUCE: the thermostat vanishing right after an active correction exchange is
+            // what a person pulling the unit off the wall looks like (see the Jun 23 / Jul 2 dawn
+            // battles that ended in ->0). Fighting harder is how thermostats get detached; instead
+            // stand down for two hours so the person finds a defender that respects the message.
+            var recentDefenderCommand = state.LastDefenderCommandAt is { } cmd && now - cmd <= TimeSpan.FromMinutes(20);
+            var recentHumanTouch = state.ExternalTouchTimes.Any(t => now - t <= TimeSpan.FromMinutes(45));
+            var alreadyQuiet = state.EmergencyQuietUntil is { } quiet && quiet > now;
+            if (recentDefenderCommand && recentHumanTouch && !alreadyQuiet)
+            {
+                state.EmergencyQuietUntil = now.AddHours(2);
+                state.EmergencyProtocol = "Tamper truce";
+                state.EmergencyStatus = "🚨 ULTRA OMEGA ALERT — TAMPER TRUCE: the thermostat disappeared right after a "
+                    + "correction exchange — someone may have detached it in frustration. All corrections stop for 2 hours.";
+                AddEvent("warning",
+                    "ULTRA OMEGA ALERT (tamper truce): thermostat became unreachable minutes after a correction exchange; standing down 2 hours instead of escalating.");
+            }
+
             state.ConnectionState = "unavailable";
             state.LastError = message;
             state.NextAction = "Waiting for Home Assistant connection.";
-            state.NextActionAt = DateTimeOffset.UtcNow.AddSeconds(options.PollIntervalSeconds);
-            state.UpdatedAt = DateTimeOffset.UtcNow;
+            state.NextActionAt = now.AddSeconds(options.PollIntervalSeconds);
+            state.UpdatedAt = now;
             AddEvent("warning", message);
             SaveState();
             return CreateSnapshot();
@@ -5645,6 +5694,15 @@ public sealed class DefenderStateStore
             // No guard, learned offset, boost, or comfort override is allowed to cool below it.
             target = Math.Max(target, state.TargetTemperatureCelsius);
 
+            // REPEATED-RAISE SURRENDER: a human insisted (3+ raises to the same value in 30 min), so
+            // their number IS the target for a few hours — with no warm-room escape. Only ever
+            // raises the effective target; my temp stays the floor and emergencies still win.
+            if (state.SurrenderUntil is { } surrenderUntil && surrenderUntil > now
+                && state.SurrenderTargetCelsius is { } surrendered)
+            {
+                target = Math.Max(target, surrendered);
+            }
+
             // BUDGET PREFERENCE: when month-to-date all-in spend is running ahead of the pro-rated
             // budget, let the room run a little warmer (raise the effective target) to spend less —
             // biased toward the expensive on/mid-peak periods. It only ever RAISES the target (never
@@ -6141,10 +6199,13 @@ public sealed class DefenderStateStore
             state.ThermostatChanges.RemoveRange(100, state.ThermostatChanges.Count - 100);
         }
 
+        AppendThermostatHistory(audit);
+
         ApplyTouchIntentGrace(reading, now);
         ApplyCoolerIntentFastLane(reading, now);
         TryUpdateComfortMemory(reading, now);
         TryStartComfortCompromise(reading, now);
+        TryStartRepeatedRaiseSurrender(reading, previous, now);
 
         AddEvent("warning",
             $"External thermostat change ({source.Label}): {previous:0.0} C to {reading.SetPointCelsius:0.0} C at {now:yyyy-MM-dd HH:mm:ss}.");
@@ -6218,6 +6279,8 @@ public sealed class DefenderStateStore
         {
             state.ThermostatChanges.RemoveRange(100, state.ThermostatChanges.Count - 100);
         }
+
+        AppendThermostatHistory(audit);
 
         AddEvent("warning",
             $"Rival schedule change ({label}): {previous:0.0} C to {reading.SetPointCelsius:0.0} C at {now:yyyy-MM-dd HH:mm:ss}. "
@@ -6672,6 +6735,79 @@ public sealed class DefenderStateStore
             netChange,
             extraMinutes,
             $"Touch intent sees mixed wall choices ({netChange:+0.0;-0.0;0.0} C net).");
+    }
+
+    /// <summary>
+    /// Repeated-raise surrender: when a human re-raises the setpoint to roughly the same value
+    /// 3+ times inside 30 minutes, the defender ADOPTS that value for 4 hours — deliberately with
+    /// NO warm-room escape hatch, because the warm-room bypass is exactly what turned dawn
+    /// disagreements into a detached thermostat. The human wins the argument; safety is preserved
+    /// by capping the adopted value and leaving emergencies untouched.
+    /// </summary>
+    private void TryStartRepeatedRaiseSurrender(ThermostatReading reading, double previous, DateTimeOffset now)
+    {
+        // Prune the 30-minute window first so stale volleys never linger.
+        while (state.ExternalRaiseTimes.Count > 0 && now - state.ExternalRaiseTimes[0] > TimeSpan.FromMinutes(30))
+        {
+            state.ExternalRaiseTimes.RemoveAt(0);
+            state.ExternalRaiseValues.RemoveAt(0);
+        }
+
+        if (previous <= 5.0 || reading.SetPointCelsius <= 5.0 || reading.SetPointCelsius <= previous + 0.05)
+        {
+            return; // not a real raise
+        }
+
+        state.ExternalRaiseTimes.Add(now);
+        state.ExternalRaiseValues.Add(Math.Round(reading.SetPointCelsius, 1));
+        while (state.ExternalRaiseTimes.Count > 10)
+        {
+            state.ExternalRaiseTimes.RemoveAt(0);
+            state.ExternalRaiseValues.RemoveAt(0);
+        }
+
+        var wanted = reading.SetPointCelsius;
+        var similarRaises = state.ExternalRaiseValues.Count(v => Math.Abs(v - wanted) <= 0.7);
+        if (similarRaises < 3)
+        {
+            return;
+        }
+
+        var adopted = Math.Round(Math.Min(wanted, 27.0), 1); // safety cap; emergencies still override
+        state.SurrenderTargetCelsius = adopted;
+        state.SurrenderUntil = now.AddHours(4);
+        state.ExternalRaiseTimes.Clear();
+        state.ExternalRaiseValues.Clear();
+        ResetCoolingDefenderStep();
+        AddEvent("warning",
+            $"Repeated-raise surrender: {similarRaises} raises to ~{wanted:0.0} C within 30 minutes — the person clearly wants it. "
+            + $"Adopting {adopted:0.0} C until {state.SurrenderUntil.Value.ToLocalTime():HH:mm} instead of arguing.");
+    }
+
+    /// <summary>
+    /// Wake-Up Truce: the bedroom door opened during the dawn window, so that person is awake.
+    /// Adopt the truce temperature immediately (via the surrender fields) so the defender agrees
+    /// with them before they ever touch the thermostat. Only ever raises the effective target.
+    /// </summary>
+    public void BeginWakeTruce(double targetCelsius, int holdMinutes, DateTimeOffset now)
+    {
+        lock (gate)
+        {
+            var adopted = Math.Round(Math.Clamp(targetCelsius, state.TargetTemperatureCelsius, 27.0), 1);
+            var until = now.AddMinutes(Math.Clamp(holdMinutes, 15, 720));
+            if (state.SurrenderUntil is { } existing && existing > now
+                && state.SurrenderTargetCelsius is { } current && current >= adopted)
+            {
+                return; // an equal-or-warmer truce is already standing
+            }
+
+            state.SurrenderTargetCelsius = adopted;
+            state.SurrenderUntil = until;
+            ResetCoolingDefenderStep();
+            AddEvent("info",
+                $"Wake-up truce: the bedroom door opened at {now.ToLocalTime():HH:mm}, so the defender adopted {adopted:0.0} C until {until.ToLocalTime():HH:mm} — good morning, no fight.");
+            SaveState();
+        }
     }
 
     private void TryStartComfortCompromise(ThermostatReading reading, DateTimeOffset now)
@@ -10275,6 +10411,62 @@ public sealed class DefenderStateStore
         }
     }
 
+    /// <summary>
+    /// One-time seed: if the append-only history file does not exist yet (first run after this
+    /// feature shipped), write the changes currently held in the loaded state — oldest first — so
+    /// the ~100 changes already captured in the state blob are carried into the permanent record
+    /// instead of being lost as new changes push them off the capped in-memory list.
+    /// </summary>
+    private void BackfillHistoryFromStateOnce()
+    {
+        try
+        {
+            if (File.Exists(historyFilePath))
+            {
+                return;
+            }
+
+            // state.ThermostatChanges is newest-first; write chronologically (oldest first).
+            for (var i = state.ThermostatChanges.Count - 1; i >= 0; i--)
+            {
+                AppendThermostatHistory(state.ThermostatChanges[i]);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Could not seed thermostat history from state at {HistoryFilePath}", historyFilePath);
+        }
+    }
+
+    /// <summary>
+    /// Durable, append-only history: writes one compact JSON line per thermostat change to
+    /// thermostat-history.jsonl in the persisted state directory. Unlike the in-memory
+    /// ThermostatChanges list (capped at 100 for the UI), this file is NEVER trimmed — it is the
+    /// permanent record so month-over-month patterns are never lost. Append is best-effort: a
+    /// failure here must never break the defender's control loop, so it only logs a warning.
+    /// </summary>
+    private void AppendThermostatHistory(ThermostatChangeAudit audit)
+    {
+        try
+        {
+            var line = JsonSerializer.Serialize(audit, historyJsonOptions);
+            lock (historyGate)
+            {
+                var directory = Path.GetDirectoryName(historyFilePath);
+                if (!string.IsNullOrWhiteSpace(directory))
+                {
+                    Directory.CreateDirectory(directory);
+                }
+
+                File.AppendAllText(historyFilePath, line + Environment.NewLine);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Could not append thermostat history to {HistoryFilePath}", historyFilePath);
+        }
+    }
+
     private static bool IsWeatherRuleAllowed(string mode, ThermostatReading reading, WeatherRuntimeState? weather)
     {
         var outdoor = weather?.OutdoorTemperatureCelsius;
@@ -11125,6 +11317,23 @@ public sealed class DefenderStateStore
         public string? LastChangeContextId { get; set; }
 
         public string? LastChangeContextParentId { get; set; }
+
+        // Energy-kiosk cost-concern signal: last time (and how often) someone pressed the kiosk's
+        // monthly-usage button. The kiosk never mentions the defender; the defender still listens.
+        public DateTimeOffset? KioskCostConcernAt { get; set; }
+
+        public int KioskCostConcernCount { get; set; }
+
+        // Repeated-raise surrender: recent external RAISES (times + values, pruned to 30 min). When a
+        // human re-raises to about the same value 3+ times, the defender adopts it for 4 hours —
+        // losing an argument gracefully beats winning it and losing the thermostat off the wall.
+        public List<DateTimeOffset> ExternalRaiseTimes { get; set; } = [];
+
+        public List<double> ExternalRaiseValues { get; set; } = [];
+
+        public DateTimeOffset? SurrenderUntil { get; set; }
+
+        public double? SurrenderTargetCelsius { get; set; }
 
         public string? LastChangeContextUserId { get; set; }
 

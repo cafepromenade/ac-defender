@@ -19,12 +19,17 @@ if (await CliCommands.TryRunAsync(args, builder.Configuration))
 
 builder.Services.Configure<HomeAssistantOptions>(builder.Configuration.GetSection(HomeAssistantOptions.SectionName));
 builder.Services.Configure<DefenderOptions>(builder.Configuration.GetSection(DefenderOptions.SectionName));
+builder.Services.Configure<KioskOptions>(builder.Configuration.GetSection(KioskOptions.SectionName));
 builder.Services.AddSingleton<DefenderStateStore>();
 builder.Services.AddSingleton<AcDefenderService>();
 builder.Services.AddSingleton<TwoFactorAuth>();
+builder.Services.AddSingleton<GoogleDeviceLogin>();
+builder.Services.AddSingleton<SdmCameraService>();
 builder.Services.AddSingleton<HomeAssistantTokenStore>();
 builder.Services.AddHttpClient<HomeAssistantClient>();
 builder.Services.AddHostedService<AcDefenderWorker>();
+builder.Services.AddHostedService<HubKioskService>();
+builder.Services.AddHostedService<WakeTruceService>();
 builder.Services.AddScoped<DefenderStateProvider>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddMudServices();
@@ -155,6 +160,21 @@ api.MapGet("/status/stream", async (HttpContext context, DefenderStateStore stor
         await context.Response.Body.FlushAsync(cancellationToken);
         await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken);
     }
+});
+
+// Front-door camera: exchange the browser's WebRTC offer for Google's answer. Auth-gated with
+// the rest of /api, so the stream is only reachable by signed-in household members.
+api.MapPost("/camera/webrtc", async (CameraWebRtcRequest request, SdmCameraService camera) =>
+{
+    if (!camera.Enabled)
+    {
+        return Results.Json(new { error = "camera bridge is not configured" }, statusCode: 503);
+    }
+
+    var answer = await camera.GenerateWebRtcAnswerAsync(request.OfferSdp ?? "");
+    return answer is null
+        ? Results.Json(new { error = "stream negotiation failed" }, statusCode: 502)
+        : Results.Json(new { answerSdp = answer });
 });
 
 api.MapPost("/target/generate", (DefenderStateStore store) =>
